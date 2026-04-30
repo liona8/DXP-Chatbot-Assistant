@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useRef, useEffect, KeyboardEvent } from "react";
-import { X, Send } from "lucide-react";
+import { useState, useRef, useEffect, useCallback, KeyboardEvent } from "react";
+import { X, Send, GripHorizontal, Minus } from "lucide-react";
 import type { Message } from "@/types/chat";
 
 interface MentorChatProps {
@@ -22,6 +22,12 @@ function formatMessage(text: string) {
   ));
 }
 
+const DEFAULT_WIDTH = 320;
+const DEFAULT_HEIGHT = 480;
+const MIN_WIDTH = 280;
+const MIN_HEIGHT = 320;
+const HEADER_HEIGHT = 52;
+
 export default function MentorChat({ isOpen, onClose }: MentorChatProps) {
   const [messages, setMessages] = useState<Message[]>([{
     id: "welcome",
@@ -32,13 +38,112 @@ export default function MentorChat({ isOpen, onClose }: MentorChatProps) {
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(true);
+  const [isMinimised, setIsMinimised] = useState(false);
+
+  // Position & size state
+  const [pos, setPos] = useState({ x: 0, y: 0 });
+  const [size, setSize] = useState({ w: DEFAULT_WIDTH, h: DEFAULT_HEIGHT });
+  const [initialised, setInitialised] = useState(false);
+
+  const windowRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Drag state
+  const dragging = useRef(false);
+  const dragOffset = useRef({ x: 0, y: 0 });
+
+  // Resize state
+  const resizing = useRef(false);
+  const resizeStart = useRef({ x: 0, y: 0, w: 0, h: 0 });
+
+  // Place window bottom-right on first open
+  useEffect(() => {
+    if (isOpen && !initialised) {
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      const w = Math.min(DEFAULT_WIDTH, vw - 32);
+      const h = Math.min(DEFAULT_HEIGHT, vh - 80);
+      setSize({ w, h });
+      setPos({ x: vw - w - 24, y: vh - h - 24 });
+      setInitialised(true);
+    }
+  }, [isOpen, initialised]);
+
+  // Keep window inside viewport on resize
+  useEffect(() => {
+    const clamp = () => {
+      setPos(p => ({
+        x: Math.min(p.x, window.innerWidth - size.w - 8),
+        y: Math.min(p.y, window.innerHeight - HEADER_HEIGHT - 8),
+      }));
+    };
+    window.addEventListener("resize", clamp);
+    return () => window.removeEventListener("resize", clamp);
+  }, [size.w]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isLoading]);
 
+  // ── Drag ──────────────────────────────────────────────
+  const onDragStart = useCallback((e: React.MouseEvent | React.TouchEvent) => {
+    dragging.current = true;
+    const clientX = "touches" in e ? e.touches[0].clientX : e.clientX;
+    const clientY = "touches" in e ? e.touches[0].clientY : e.clientY;
+    dragOffset.current = {
+      x: clientX - pos.x,
+      y: clientY - pos.y,
+    };
+
+    const move = (ev: MouseEvent | TouchEvent) => {
+      if (!dragging.current) return;
+      const cx = "touches" in ev ? ev.touches[0].clientX : ev.clientX;
+      const cy = "touches" in ev ? ev.touches[0].clientY : ev.clientY;
+      const nx = Math.max(0, Math.min(cx - dragOffset.current.x, window.innerWidth - size.w));
+      const ny = Math.max(0, Math.min(cy - dragOffset.current.y, window.innerHeight - HEADER_HEIGHT));
+      setPos({ x: nx, y: ny });
+    };
+
+    const up = () => {
+      dragging.current = false;
+      window.removeEventListener("mousemove", move);
+      window.removeEventListener("mouseup", up);
+      window.removeEventListener("touchmove", move);
+      window.removeEventListener("touchend", up);
+    };
+
+    window.addEventListener("mousemove", move);
+    window.addEventListener("mouseup", up);
+    window.addEventListener("touchmove", move, { passive: true });
+    window.addEventListener("touchend", up);
+  }, [pos, size.w]);
+
+  // ── Resize (bottom-right corner) ──────────────────────
+  const onResizeStart = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    resizing.current = true;
+    resizeStart.current = { x: e.clientX, y: e.clientY, w: size.w, h: size.h };
+
+    const move = (ev: MouseEvent) => {
+      if (!resizing.current) return;
+      const nw = Math.max(MIN_WIDTH, resizeStart.current.w + ev.clientX - resizeStart.current.x);
+      const nh = Math.max(MIN_HEIGHT, resizeStart.current.h + ev.clientY - resizeStart.current.y);
+      setSize({ w: nw, h: nh });
+    };
+
+    const up = () => {
+      resizing.current = false;
+      window.removeEventListener("mousemove", move);
+      window.removeEventListener("mouseup", up);
+    };
+
+    window.addEventListener("mousemove", move);
+    window.addEventListener("mouseup", up);
+  }, [size]);
+
+  // ── Send message ──────────────────────────────────────
   const sendMessage = async (text: string) => {
     if (!text.trim() || isLoading) return;
     setShowSuggestions(false);
@@ -49,13 +154,13 @@ export default function MentorChat({ isOpen, onClose }: MentorChatProps) {
       content: text.trim(),
       timestamp: new Date(),
     };
-    setMessages((prev) => [...prev, userMessage]);
+    setMessages(prev => [...prev, userMessage]);
     setInput("");
     setIsLoading(true);
     if (textareaRef.current) textareaRef.current.style.height = "auto";
 
     try {
-      const history = [...messages, userMessage].map((m) => ({ role: m.role, content: m.content }));
+      const history = [...messages, userMessage].map(m => ({ role: m.role, content: m.content }));
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -63,14 +168,14 @@ export default function MentorChat({ isOpen, onClose }: MentorChatProps) {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Request failed");
-      setMessages((prev) => [...prev, {
+      setMessages(prev => [...prev, {
         id: Date.now().toString(),
         role: "assistant",
         content: data.content,
         timestamp: new Date(),
       }]);
     } catch {
-      setMessages((prev) => [...prev, {
+      setMessages(prev => [...prev, {
         id: Date.now().toString(),
         role: "assistant",
         content: "Sorry, something went wrong. Please try again.",
@@ -91,163 +196,223 @@ export default function MentorChat({ isOpen, onClose }: MentorChatProps) {
     e.target.style.height = Math.min(e.target.scrollHeight, 80) + "px";
   };
 
+  if (!isOpen || !initialised) return null;
+
+  const windowHeight = isMinimised ? HEADER_HEIGHT : size.h;
+
   return (
-    <>
-      {/* ── Desktop: right-side panel ── */}
-      <div className={`
-        hidden md:flex flex-col bg-white border-l border-gray-100
-        shrink-0 transition-all duration-300 overflow-hidden
-        ${isOpen ? "w-[320px] lg:w-85" : "w-0"}
-      `}>
-        <ChatInner
-          messages={messages}
-          input={input}
-          isLoading={isLoading}
-          showSuggestions={showSuggestions}
-          messagesEndRef={messagesEndRef}
-          textareaRef={textareaRef}
-          onClose={onClose}
-          onSend={sendMessage}
-          onKeyDown={handleKeyDown}
-          onResize={autoResize}
-        />
-      </div>
+    <div
+      ref={windowRef}
+      style={{
+        position: "fixed",
+        left: pos.x,
+        top: pos.y,
+        width: size.w,
+        height: windowHeight,
+        zIndex: 50,
+        display: "flex",
+        flexDirection: "column",
+        borderRadius: 14,
+        overflow: "hidden",
+        boxShadow: "0 8px 32px rgba(0,0,0,0.14), 0 2px 8px rgba(0,0,0,0.08)",
+        border: "1px solid rgba(0,0,0,0.08)",
+        background: "white",
+        transition: isMinimised ? "height 0.2s ease" : "none",
+        userSelect: dragging.current ? "none" : "auto",
+      }}
+    >
+      {/* ── Header / drag handle ── */}
+      <div
+        onMouseDown={onDragStart}
+        onTouchStart={onDragStart}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 10,
+          padding: "0 12px",
+          height: HEADER_HEIGHT,
+          borderBottom: isMinimised ? "none" : "1px solid rgba(0,0,0,0.06)",
+          cursor: "grab",
+          flexShrink: 0,
+          background: "white",
+          userSelect: "none",
+        }}
+      >
+        {/* Grip icon */}
+        <GripHorizontal size={14} strokeWidth={2} style={{ color: "#9ca3af", flexShrink: 0 }} />
 
-      {/* ── Mobile: bottom drawer ── */}
-      {isOpen && (
-        <div className="md:hidden fixed inset-0 z-40 flex flex-col justify-end">
-          <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-          <div className="relative bg-white rounded-t-2xl flex flex-col h-[75vh] shadow-xl">
-            <ChatInner
-              messages={messages}
-              input={input}
-              isLoading={isLoading}
-              showSuggestions={showSuggestions}
-              messagesEndRef={messagesEndRef}
-              textareaRef={textareaRef}
-              onClose={onClose}
-              onSend={sendMessage}
-              onKeyDown={handleKeyDown}
-              onResize={autoResize}
-            />
-          </div>
-        </div>
-      )}
-    </>
-  );
-}
-
-/* ── Shared inner UI ── */
-interface ChatInnerProps {
-  messages: Message[];
-  input: string;
-  isLoading: boolean;
-  showSuggestions: boolean;
-  messagesEndRef: React.RefObject<HTMLDivElement | null>;
-  textareaRef: React.RefObject<HTMLTextAreaElement | null>;
-  onClose: () => void;
-  onSend: (text: string) => void;
-  onKeyDown: (e: KeyboardEvent<HTMLTextAreaElement>) => void;
-  onResize: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
-}
-
-function ChatInner({
-  messages, input, isLoading, showSuggestions,
-  messagesEndRef, textareaRef,
-  onClose, onSend, onKeyDown, onResize,
-}: ChatInnerProps) {
-  return (
-    <>
-      {/* Header */}
-      <div className="flex items-center gap-2.5 px-4 py-3.5 border-b border-gray-100 shrink-0">
-        <div className="w-8 h-8 rounded-full bg-linear-to-br from-indigo-500 to-indigo-700 flex items-center justify-center shrink-0">
-          <svg width="15" height="15" viewBox="0 0 16 16" fill="white">
+        {/* Avatar */}
+        <div style={{
+          width: 30, height: 30, borderRadius: "50%",
+          background: "linear-gradient(135deg, #6366f1, #4338ca)",
+          display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+        }}>
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="white">
             <path d="M8 1C4.1 1 1 3.7 1 7c0 1.8.8 3.4 2.1 4.5L2.5 14l2.8-1.2C6.1 13.6 7 13.7 8 13.7c3.9 0 7-2.7 7-6.1C15 3.7 11.9 1 8 1z" />
           </svg>
         </div>
-        <div className="flex-1 min-w-0">
-          <div className="text-[13px] font-medium text-gray-900">Aria — Project Mentor</div>
-          <div className="flex items-center gap-1.5 text-[11px] text-emerald-600">
-            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 13, fontWeight: 500, color: "#111827" }}>Aria — Project Mentor</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: "#059669" }}>
+            <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#10b981" }} />
             Online now
           </div>
         </div>
+
+        {/* Minimise */}
         <button
-          onClick={onClose}
-          className="w-6 h-6 rounded-full bg-gray-100 hover:bg-gray-200 transition-colors flex items-center justify-center"
+          onMouseDown={e => e.stopPropagation()}
+          onClick={() => setIsMinimised(m => !m)}
+          style={{
+            width: 24, height: 24, borderRadius: "50%", border: "none",
+            background: "#f3f4f6", cursor: "pointer", display: "flex",
+            alignItems: "center", justifyContent: "center",
+          }}
         >
-          <X size={12} strokeWidth={2} className="text-gray-500" />
+          <Minus size={11} strokeWidth={2.5} style={{ color: "#6b7280" }} />
+        </button>
+
+        {/* Close */}
+        <button
+          onMouseDown={e => e.stopPropagation()}
+          onClick={onClose}
+          style={{
+            width: 24, height: 24, borderRadius: "50%", border: "none",
+            background: "#f3f4f6", cursor: "pointer", display: "flex",
+            alignItems: "center", justifyContent: "center",
+          }}
+        >
+          <X size={11} strokeWidth={2.5} style={{ color: "#6b7280" }} />
         </button>
       </div>
 
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto scrollbar-thin px-4 py-4 flex flex-col gap-3">
-        {messages.map((msg) => (
-          <div
-            key={msg.id}
-            className={`flex flex-col gap-1 max-w-[88%] ${
-              msg.role === "user" ? "self-end items-end" : "self-start items-start"
-            }`}
-          >
-            <div className={`px-3 py-2 text-[12px] leading-relaxed ${
-              msg.role === "user"
-                ? "bg-indigo-700 text-white rounded-2xl rounded-br-sm"
-                : "bg-gray-100 text-gray-800 rounded-2xl rounded-tl-sm"
-            }`}>
-              {formatMessage(msg.content)}
-            </div>
-            <div className="text-[10px] text-gray-400">
-              {msg.timestamp.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-            </div>
-          </div>
-        ))}
+      {/* ── Body (hidden when minimised) ── */}
+      {!isMinimised && (
+        <>
+          {/* Messages */}
+          <div style={{ flex: 1, overflowY: "auto", padding: "12px 14px", display: "flex", flexDirection: "column", gap: 10 }}>
+            {messages.map(msg => (
+              <div
+                key={msg.id}
+                style={{
+                  display: "flex", flexDirection: "column", gap: 3,
+                  maxWidth: "88%",
+                  alignSelf: msg.role === "user" ? "flex-end" : "flex-start",
+                  alignItems: msg.role === "user" ? "flex-end" : "flex-start",
+                }}
+              >
+                <div style={{
+                  padding: "8px 12px",
+                  fontSize: 12, lineHeight: 1.6,
+                  borderRadius: msg.role === "user" ? "16px 16px 4px 16px" : "16px 16px 16px 4px",
+                  background: msg.role === "user" ? "#4338ca" : "#f3f4f6",
+                  color: msg.role === "user" ? "white" : "#1f2937",
+                }}>
+                  {formatMessage(msg.content)}
+                </div>
+                <div style={{ fontSize: 10, color: "#9ca3af" }}>
+                  {msg.timestamp.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                </div>
+              </div>
+            ))}
 
-        {isLoading && (
-          <div className="self-start">
-            <div className="bg-gray-100 rounded-2xl rounded-tl-sm px-4 py-3 flex items-center gap-1">
-              <div className="w-1.5 h-1.5 rounded-full bg-gray-400 loading-dot" />
-              <div className="w-1.5 h-1.5 rounded-full bg-gray-400 loading-dot" />
-              <div className="w-1.5 h-1.5 rounded-full bg-gray-400 loading-dot" />
-            </div>
+            {isLoading && (
+              <div style={{ alignSelf: "flex-start" }}>
+                <div style={{
+                  background: "#f3f4f6", borderRadius: "16px 16px 16px 4px",
+                  padding: "10px 14px", display: "flex", gap: 4, alignItems: "center",
+                }}>
+                  {[0, 150, 300].map(delay => (
+                    <div key={delay} style={{
+                      width: 6, height: 6, borderRadius: "50%", background: "#9ca3af",
+                      animation: `bounce 1.2s ${delay}ms infinite`,
+                    }} />
+                  ))}
+                </div>
+              </div>
+            )}
+            <div ref={messagesEndRef} />
           </div>
-        )}
-        <div ref={messagesEndRef} />
-      </div>
 
-      {/* Suggestions */}
-      {showSuggestions && (
-        <div className="px-3 pb-2.5 flex flex-wrap gap-1.5">
-          {SUGGESTIONS.map((s) => (
+          {/* Suggestions */}
+          {showSuggestions && (
+            <div style={{ padding: "0 10px 10px", display: "flex", flexWrap: "wrap", gap: 6 }}>
+              {SUGGESTIONS.map(s => (
+                <button
+                  key={s.label}
+                  onClick={() => sendMessage(s.prompt)}
+                  style={{
+                    padding: "4px 10px", borderRadius: 999,
+                    border: "1px solid #c7d2fe", background: "#eef2ff",
+                    fontSize: 11, color: "#4338ca", cursor: "pointer",
+                  }}
+                >
+                  {s.label}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Input */}
+          <div style={{
+            padding: "10px 12px", borderTop: "1px solid rgba(0,0,0,0.06)",
+            display: "flex", alignItems: "flex-end", gap: 8, flexShrink: 0,
+          }}>
+            <textarea
+              ref={textareaRef}
+              value={input}
+              onChange={autoResize}
+              onKeyDown={handleKeyDown}
+              placeholder="Ask Aria anything about this project..."
+              rows={1}
+              style={{
+                flex: 1, resize: "none", border: "1px solid #e5e7eb",
+                borderRadius: 18, padding: "8px 14px", fontSize: 12,
+                background: "#f9fafb", color: "#111827", outline: "none",
+                minHeight: 36, maxHeight: 80, lineHeight: 1.5,
+                fontFamily: "inherit",
+              }}
+            />
             <button
-              key={s.label}
-              onClick={() => onSend(s.prompt)}
-              className="px-2.5 py-1 rounded-full border border-indigo-200 bg-indigo-50 text-[11px] text-indigo-700 hover:bg-indigo-100 transition-colors"
+              onClick={() => sendMessage(input)}
+              disabled={!input.trim() || isLoading}
+              style={{
+                width: 32, height: 32, borderRadius: "50%", border: "none",
+                background: !input.trim() || isLoading ? "#a5b4fc" : "#4338ca",
+                cursor: !input.trim() || isLoading ? "not-allowed" : "pointer",
+                display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+              }}
             >
-              {s.label}
+              <Send size={13} strokeWidth={2} style={{ color: "white" }} />
             </button>
-          ))}
+          </div>
+        </>
+      )}
+
+      {/* ── Resize handle (bottom-right corner) ── */}
+      {!isMinimised && (
+        <div
+          onMouseDown={onResizeStart}
+          style={{
+            position: "absolute", bottom: 0, right: 0,
+            width: 16, height: 16, cursor: "nwse-resize",
+            display: "flex", alignItems: "flex-end", justifyContent: "flex-end",
+            padding: 3,
+          }}
+        >
+          <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+            <path d="M9 1L1 9M9 5L5 9M9 9" stroke="#d1d5db" strokeWidth="1.5" strokeLinecap="round" />
+          </svg>
         </div>
       )}
 
-      {/* Input */}
-      <div className="px-3 py-3 border-t border-gray-100 flex items-end gap-2 shrink-0">
-        <textarea
-          ref={textareaRef}
-          value={input}
-          onChange={onResize}
-          onKeyDown={onKeyDown}
-          placeholder="Ask Aria anything about this project..."
-          rows={1}
-          className="flex-1 resize-none border border-gray-200 rounded-2xl px-3.5 py-2 text-[12px] bg-gray-50 text-gray-900 outline-none focus:border-indigo-400 focus:bg-white transition-colors min-h-9 max-h-20 leading-relaxed"
-        />
-        <button
-          onClick={() => onSend(input)}
-          disabled={!input.trim() || isLoading}
-          className="w-8 h-8 rounded-full bg-indigo-700 hover:bg-indigo-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center justify-center shrink-0"
-        >
-          <Send size={13} strokeWidth={2} className="text-white" />
-        </button>
-      </div>
-    </>
+      <style>{`
+        @keyframes bounce {
+          0%, 60%, 100% { transform: translateY(0); }
+          30% { transform: translateY(-4px); }
+        }
+      `}</style>
+    </div>
   );
 }
