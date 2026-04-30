@@ -24,8 +24,7 @@ export default function MissionSection() {
 
   return (
     <>
-      {/* Your Mission */}
-      <div className="bg-white border border-gray-100 rounded-xl p-6">
+      <div className="bg-white border border-gray-100 rounded-xl p-4 md:p-6">
         <h2 className="text-[15px] font-medium text-gray-900 mb-3">Your Mission</h2>
         <p className="text-[13px] text-gray-500 mb-3">
           Build a concept solution that outlines a centralised budget planning workflow that:
@@ -40,8 +39,7 @@ export default function MissionSection() {
         </ol>
       </div>
 
-      {/* Technical Requirements */}
-      <div className="bg-white border border-gray-100 rounded-xl p-6">
+      <div className="bg-white border border-gray-100 rounded-xl p-4 md:p-6">
         <h2 className="text-[15px] font-medium text-gray-900 mb-3">Technical Requirements</h2>
         <p className="text-[13px] text-gray-400 mb-3">Ideal but not limited to:</p>
         <ol className="space-y-2 mb-4">
@@ -54,9 +52,7 @@ export default function MissionSection() {
         </ol>
         <div className="space-y-1.5">
           {skills.map((skill, i) => (
-            <div key={i} className="text-[13px] text-gray-500">
-              – {skill}
-            </div>
+            <div key={i} className="text-[13px] text-gray-500">– {skill}</div>
           ))}
         </div>
       </div>

@@ -8,9 +8,9 @@ export default function ProblemOverview() {
   ];
 
   return (
-    <div className="grid grid-cols-[1fr_240px] gap-4">
+    <div className="grid grid-cols-1 md:grid-cols-[1fr_220px] lg:grid-cols-[1fr_240px] gap-4">
       {/* Problem card */}
-      <div className="bg-white border border-gray-100 rounded-xl p-6">
+      <div className="bg-white border border-gray-100 rounded-xl p-4 md:p-6">
         <h2 className="text-[15px] font-medium text-gray-900 mb-4">Problem Overview</h2>
         <p className="text-[13px] text-gray-500 leading-relaxed mb-3">
           A company&apos;s budget planning process is currently managed through disconnected spreadsheets across HR,
@@ -28,22 +28,20 @@ export default function ProblemOverview() {
         </ol>
       </div>
 
-      {/* Timeline card */}
-      <div className="bg-white border border-gray-100 rounded-xl p-5 h-fit">
+      {/* Timeline card — full width on mobile, sidebar on md+ */}
+      <div className="bg-white border border-gray-100 rounded-xl p-4 md:p-5 md:h-fit">
         <h2 className="text-[15px] font-medium text-gray-900 mb-4">Timeline</h2>
-        <div className="space-y-4">
-          <div>
-            <div className="text-[10px] text-gray-400 tracking-widest uppercase mb-1">Submission Deadline</div>
-            <div className="text-[14px] font-medium text-gray-900">Thursday, 30 April 2026</div>
-          </div>
-          <div>
-            <div className="text-[10px] text-gray-400 tracking-widest uppercase mb-1">Estimated Project Start</div>
-            <div className="text-[14px] font-medium text-gray-900">Monday, 11 May 2026</div>
-          </div>
-          <div>
-            <div className="text-[10px] text-gray-400 tracking-widest uppercase mb-1">Duration</div>
-            <div className="text-[14px] font-medium text-gray-900">8 weeks</div>
-          </div>
+        <div className="grid grid-cols-3 md:grid-cols-1 gap-3 md:gap-4">
+          {[
+            { label: "Submission Deadline",     value: "Thursday, 30 April 2026" },
+            { label: "Estimated Project Start", value: "Monday, 11 May 2026"     },
+            { label: "Duration",                value: "8 weeks"                 },
+          ].map(({ label, value }) => (
+            <div key={label}>
+              <div className="text-[10px] text-gray-400 tracking-widest uppercase mb-1">{label}</div>
+              <div className="text-[13px] md:text-[14px] font-medium text-gray-900">{value}</div>
+            </div>
+          ))}
         </div>
       </div>
     </div>

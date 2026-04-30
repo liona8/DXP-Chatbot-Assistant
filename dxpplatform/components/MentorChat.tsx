@@ -1,6 +1,5 @@
 "use client";
 
-
 import { useState, useRef, useEffect, KeyboardEvent } from "react";
 import { X, Send } from "lucide-react";
 import type { Message } from "@/types/chat";
@@ -11,31 +10,25 @@ interface MentorChatProps {
 }
 
 const SUGGESTIONS = [
-  { label: "How to structure my PDF?", prompt: "How should I structure my proposal PDF?" },
-  { label: "Recommended tech stack", prompt: "What tech stack would you recommend for this project?" },
-  { label: "Evaluation criteria", prompt: "What are the key evaluation criteria for this project?" },
-  { label: "3 days left tips", prompt: "I only have 3 days left — what should I prioritise?" },
+  { label: "How to structure my PDF?",  prompt: "How should I structure my proposal PDF?" },
+  { label: "Recommended tech stack",    prompt: "What tech stack would you recommend for this project?" },
+  { label: "Evaluation criteria",       prompt: "What are the key evaluation criteria for this project?" },
+  { label: "3 days left tips",          prompt: "I only have 3 days left — what should I prioritise?" },
 ];
 
 function formatMessage(text: string) {
-  return text.split("\n").map((line, i) => (
-    <span key={i}>
-      {line}
-      {i < text.split("\n").length - 1 && <br />}
-    </span>
+  return text.split("\n").map((line, i, arr) => (
+    <span key={i}>{line}{i < arr.length - 1 && <br />}</span>
   ));
 }
 
 export default function MentorChat({ isOpen, onClose }: MentorChatProps) {
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: "welcome",
-      role: "assistant",
-      content:
-        "Hi Pei Ying! I'm Aria, your project mentor for the Budget Planning Workflow. I'm here to help you craft a strong proposal. What would you like to work on? 👋",
-      timestamp: new Date(),
-    },
-  ]);
+  const [messages, setMessages] = useState<Message[]>([{
+    id: "welcome",
+    role: "assistant",
+    content: "Hi Pei Ying! I'm Aria, your project mentor for the Budget Planning Workflow. I'm here to help you craft a strong proposal. What would you like to work on? 👋",
+    timestamp: new Date(),
+  }]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(true);
@@ -48,67 +41,48 @@ export default function MentorChat({ isOpen, onClose }: MentorChatProps) {
 
   const sendMessage = async (text: string) => {
     if (!text.trim() || isLoading) return;
-
     setShowSuggestions(false);
+
     const userMessage: Message = {
       id: Date.now().toString(),
       role: "user",
       content: text.trim(),
       timestamp: new Date(),
     };
-
     setMessages((prev) => [...prev, userMessage]);
     setInput("");
     setIsLoading(true);
-
-    if (textareaRef.current) {
-      textareaRef.current.style.height = "auto";
-    }
+    if (textareaRef.current) textareaRef.current.style.height = "auto";
 
     try {
-      const history = [...messages, userMessage].map((m) => ({
-        role: m.role,
-        content: m.content,
-      }));
-
+      const history = [...messages, userMessage].map((m) => ({ role: m.role, content: m.content }));
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ messages: history }),
       });
-
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Request failed");
-
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: Date.now().toString(),
-          role: "assistant",
-          content: data.content,
-          timestamp: new Date(),
-        },
-      ]);
+      setMessages((prev) => [...prev, {
+        id: Date.now().toString(),
+        role: "assistant",
+        content: data.content,
+        timestamp: new Date(),
+      }]);
     } catch {
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: Date.now().toString(),
-          role: "assistant",
-          content: "Sorry, something went wrong. Please try again.",
-          timestamp: new Date(),
-        },
-      ]);
+      setMessages((prev) => [...prev, {
+        id: Date.now().toString(),
+        role: "assistant",
+        content: "Sorry, something went wrong. Please try again.",
+        timestamp: new Date(),
+      }]);
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      sendMessage(input);
-    }
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(input); }
   };
 
   const autoResize = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -118,11 +92,72 @@ export default function MentorChat({ isOpen, onClose }: MentorChatProps) {
   };
 
   return (
-    <div
-      className={`flex flex-col bg-white border-l border-gray-100 shrink-0 transition-all duration-300 overflow-hidden ${
-        isOpen ? "w-85" : "w-0"
-      }`}
-    >
+    <>
+      {/* ── Desktop: right-side panel ── */}
+      <div className={`
+        hidden md:flex flex-col bg-white border-l border-gray-100
+        shrink-0 transition-all duration-300 overflow-hidden
+        ${isOpen ? "w-[320px] lg:w-85" : "w-0"}
+      `}>
+        <ChatInner
+          messages={messages}
+          input={input}
+          isLoading={isLoading}
+          showSuggestions={showSuggestions}
+          messagesEndRef={messagesEndRef}
+          textareaRef={textareaRef}
+          onClose={onClose}
+          onSend={sendMessage}
+          onKeyDown={handleKeyDown}
+          onResize={autoResize}
+        />
+      </div>
+
+      {/* ── Mobile: bottom drawer ── */}
+      {isOpen && (
+        <div className="md:hidden fixed inset-0 z-40 flex flex-col justify-end">
+          <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+          <div className="relative bg-white rounded-t-2xl flex flex-col h-[75vh] shadow-xl">
+            <ChatInner
+              messages={messages}
+              input={input}
+              isLoading={isLoading}
+              showSuggestions={showSuggestions}
+              messagesEndRef={messagesEndRef}
+              textareaRef={textareaRef}
+              onClose={onClose}
+              onSend={sendMessage}
+              onKeyDown={handleKeyDown}
+              onResize={autoResize}
+            />
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+/* ── Shared inner UI ── */
+interface ChatInnerProps {
+  messages: Message[];
+  input: string;
+  isLoading: boolean;
+  showSuggestions: boolean;
+  messagesEndRef: React.RefObject<HTMLDivElement | null>;
+  textareaRef: React.RefObject<HTMLTextAreaElement | null>;
+  onClose: () => void;
+  onSend: (text: string) => void;
+  onKeyDown: (e: KeyboardEvent<HTMLTextAreaElement>) => void;
+  onResize: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
+}
+
+function ChatInner({
+  messages, input, isLoading, showSuggestions,
+  messagesEndRef, textareaRef,
+  onClose, onSend, onKeyDown, onResize,
+}: ChatInnerProps) {
+  return (
+    <>
       {/* Header */}
       <div className="flex items-center gap-2.5 px-4 py-3.5 border-b border-gray-100 shrink-0">
         <div className="w-8 h-8 rounded-full bg-linear-to-br from-indigo-500 to-indigo-700 flex items-center justify-center shrink-0">
@@ -154,13 +189,11 @@ export default function MentorChat({ isOpen, onClose }: MentorChatProps) {
               msg.role === "user" ? "self-end items-end" : "self-start items-start"
             }`}
           >
-            <div
-              className={`px-3 py-2 text-[12px] leading-relaxed ${
-                msg.role === "user"
-                  ? "bg-indigo-700 text-white rounded-2xl rounded-br-sm"
-                  : "bg-gray-100 text-gray-800 rounded-2xl rounded-tl-sm"
-              }`}
-            >
+            <div className={`px-3 py-2 text-[12px] leading-relaxed ${
+              msg.role === "user"
+                ? "bg-indigo-700 text-white rounded-2xl rounded-br-sm"
+                : "bg-gray-100 text-gray-800 rounded-2xl rounded-tl-sm"
+            }`}>
               {formatMessage(msg.content)}
             </div>
             <div className="text-[10px] text-gray-400">
@@ -169,9 +202,8 @@ export default function MentorChat({ isOpen, onClose }: MentorChatProps) {
           </div>
         ))}
 
-        {/* Loading */}
         {isLoading && (
-          <div className="self-start max-w-[88%]">
+          <div className="self-start">
             <div className="bg-gray-100 rounded-2xl rounded-tl-sm px-4 py-3 flex items-center gap-1">
               <div className="w-1.5 h-1.5 rounded-full bg-gray-400 loading-dot" />
               <div className="w-1.5 h-1.5 rounded-full bg-gray-400 loading-dot" />
@@ -179,7 +211,6 @@ export default function MentorChat({ isOpen, onClose }: MentorChatProps) {
             </div>
           </div>
         )}
-
         <div ref={messagesEndRef} />
       </div>
 
@@ -189,7 +220,7 @@ export default function MentorChat({ isOpen, onClose }: MentorChatProps) {
           {SUGGESTIONS.map((s) => (
             <button
               key={s.label}
-              onClick={() => sendMessage(s.prompt)}
+              onClick={() => onSend(s.prompt)}
               className="px-2.5 py-1 rounded-full border border-indigo-200 bg-indigo-50 text-[11px] text-indigo-700 hover:bg-indigo-100 transition-colors"
             >
               {s.label}
@@ -203,20 +234,20 @@ export default function MentorChat({ isOpen, onClose }: MentorChatProps) {
         <textarea
           ref={textareaRef}
           value={input}
-          onChange={autoResize}
-          onKeyDown={handleKeyDown}
+          onChange={onResize}
+          onKeyDown={onKeyDown}
           placeholder="Ask Aria anything about this project..."
           rows={1}
-          className="flex-1 resize-none border border-gray-200 rounded-2xl px-3.5 py-2 text-[12px] font-sans bg-gray-50 text-gray-900 outline-none focus:border-indigo-400 focus:bg-white transition-colors min-h-9 max-h-20 leading-relaxed"
+          className="flex-1 resize-none border border-gray-200 rounded-2xl px-3.5 py-2 text-[12px] bg-gray-50 text-gray-900 outline-none focus:border-indigo-400 focus:bg-white transition-colors min-h-9 max-h-20 leading-relaxed"
         />
         <button
-          onClick={() => sendMessage(input)}
+          onClick={() => onSend(input)}
           disabled={!input.trim() || isLoading}
           className="w-8 h-8 rounded-full bg-indigo-700 hover:bg-indigo-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center justify-center shrink-0"
         >
           <Send size={13} strokeWidth={2} className="text-white" />
         </button>
       </div>
-    </div>
+    </>
   );
 }
