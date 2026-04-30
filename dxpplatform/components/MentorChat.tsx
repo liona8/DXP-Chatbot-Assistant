@@ -32,7 +32,7 @@ export default function MentorChat({ isOpen, onClose }: MentorChatProps) {
   const [messages, setMessages] = useState<Message[]>([{
     id: "welcome",
     role: "assistant",
-    content: "Hi Pei Ying! I'm Aria, your project mentor for the Budget Planning Workflow. I'm here to help you craft a strong proposal. What would you like to work on? 👋",
+    content: "Hi Pei Ying! I'm Aria, your project mentor for the Budget Planning Workflow. Feel free to ask anything.👋",
     timestamp: new Date(),
   }]);
   const [input, setInput] = useState("");
@@ -229,8 +229,8 @@ export default function MentorChat({ isOpen, onClose }: MentorChatProps) {
           display: "flex",
           alignItems: "center",
           gap: 10,
-          padding: "0 12px",
-          height: HEADER_HEIGHT,
+          padding: "10px 12px 5px",
+          height: "auto",
           borderBottom: isMinimised ? "none" : "1px solid rgba(0,0,0,0.06)",
           cursor: "grab",
           flexShrink: 0,
@@ -253,7 +253,7 @@ export default function MentorChat({ isOpen, onClose }: MentorChatProps) {
         </div>
 
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 13, fontWeight: 500, color: "#111827" }}>Aria — Project Mentor</div>
+          <div style={{ fontSize: 13, fontWeight: 500, color: "#111827" }}>Thinkra — Project Mentor Assistant</div>
           <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: "#059669" }}>
             <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#10b981" }} />
             Online now

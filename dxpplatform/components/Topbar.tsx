@@ -57,7 +57,7 @@ export default function Topbar({ onToggleChat, onToggleSidebar, chatOpen }: Topb
       >
         <MessageCircle size={13} strokeWidth={1.5} />
         <div className="w-1.5 h-1.5 md:w-2 md:h-2 rounded-full bg-emerald-400 pulse-dot" />
-        <span className="hidden sm:inline">Ask Mentor</span>
+        <span className="hidden sm:inline">Ask Thinkra</span>
       </button>
     </header>
   );
