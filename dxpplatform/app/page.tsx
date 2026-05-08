@@ -1,7 +1,7 @@
 "use server";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import ClientHome from "./clienthome";
+import Project from "./student/page";
 
 export default async function Page() {
   const session = (await cookies()).get("dxp_user");
@@ -10,5 +10,5 @@ export default async function Page() {
     redirect("/login");
   }
 
-  return <ClientHome />;
+  return <Project/>;
 }
