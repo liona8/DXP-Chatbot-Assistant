@@ -29,11 +29,8 @@ export default function CandidatePage() {
         setLocked(false);
         return;
       }
-      // router.push(
-      //   `/login/candidate/check-email?email=${encodeURIComponent(email)}`
-      // );
-      router.replace("/");
-    } catch (err) {
+      router.replace("/student");
+    } catch {
       setError("Something went wrong. Please try again.");
       setPending(false);
       setLocked(false);

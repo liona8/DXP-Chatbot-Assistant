@@ -1,5 +1,16 @@
 import type { MentorContext } from './getMentorContext'
 
+type CandidateProfileInfo = {
+  course_name?: string | null
+  institution?: string | null
+  skills?: string[] | null
+}
+
+type CandidateInfo = {
+  name?: string | null
+  candidate_profile?: CandidateProfileInfo | CandidateProfileInfo[] | null
+}
+
 export function buildMentorSystemPrompt(ctx: MentorContext): string {
   const p = ctx.project
   const h = ctx.healthLog
@@ -35,8 +46,10 @@ export function buildMentorSystemPrompt(ctx: MentorContext): string {
     ? `Status: ${h.status} (score: ${h.health_score}/100)\n  Summary: ${h.summary}\n  Red flags: ${h.red_flags?.join(', ') ?? 'None'}\n  Recommendations: ${h.recommendations?.join(', ') ?? 'None'}`
     : '  No health log available yet.'
 
-  const c = ctx.candidate?.candidate as any
-  const cp = c?.candidate_profile
+  const c = ctx.candidate?.candidate as CandidateInfo | null | undefined
+  const cp = Array.isArray(c?.candidate_profile)
+    ? c?.candidate_profile[0]
+    : c?.candidate_profile
   const candidateInfo = c
     ? `Name: ${c.name}\n  Study: ${cp?.course_name ?? 'N/A'} at ${cp?.institution ?? 'N/A'}\n  Skills: ${cp?.skills?.join(', ') ?? 'N/A'}`
     : '  Candidate info not available.'

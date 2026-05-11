@@ -12,6 +12,8 @@ export default function MentorPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (pending) return;
+
     setPending(true);
     setError(null);
 
@@ -19,9 +21,10 @@ export default function MentorPage() {
     if (result?.error) {
       setError(result.error);
       setPending(false);
+      return;
     }
     // on success → server action redirects automatically
-    router.replace('/'); //-> replace the page that you want to go
+    router.replace("/mentor");
   }
 
   return (

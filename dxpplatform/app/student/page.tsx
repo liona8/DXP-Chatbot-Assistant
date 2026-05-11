@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Sidebar from "@/components/Sidebar";
 import { createClient } from "@/lib/supabase/client";
+import { getCurrentUser } from "@/lib/auth/current-user";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface Project {
@@ -267,9 +268,7 @@ export default function Project() {
         `)
         .eq("status", "open");
 
-        const {
-        data: { user },
-        } = await supabase.auth.getUser();
+        const user = await getCurrentUser();
 
         if (user) {
         const { data: myProposals } = await supabase

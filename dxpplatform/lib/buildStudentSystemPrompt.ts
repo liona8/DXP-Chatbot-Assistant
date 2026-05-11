@@ -1,5 +1,15 @@
 import type { StudentContext } from './getStudentContext'
 
+type MentorProfileInfo = {
+  job_title?: string | null
+  company?: string | null
+}
+
+type MentorInfo = {
+  name?: string | null
+  mentor_profile?: MentorProfileInfo | MentorProfileInfo[] | null
+}
+
 export function buildStudentSystemPrompt(ctx: StudentContext): string {
   const p = ctx.project
 
@@ -17,8 +27,10 @@ export function buildStudentSystemPrompt(ctx: StudentContext): string {
     ? activeEscalations.map(e => `  Week ${e.week_no}: ${e.event_type}`).join('\n')
     : '  None.'
 
-  const mentor = ctx.mentor?.mentor as any
-  const mentorProfile = mentor?.mentor_profile
+  const mentor = ctx.mentor?.mentor as MentorInfo | null | undefined
+  const mentorProfile = Array.isArray(mentor?.mentor_profile)
+    ? mentor?.mentor_profile[0]
+    : mentor?.mentor_profile
   const mentorInfo = mentor
     ? `${mentor.name} (${mentorProfile?.job_title ?? 'Mentor'} at ${mentorProfile?.company ?? 'N/A'})`
     : 'Your assigned mentor'

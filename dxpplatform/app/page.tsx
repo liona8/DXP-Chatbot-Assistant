@@ -1,7 +1,10 @@
 "use server";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import Project from "./student/page";
+
+type SessionCookie = {
+  role?: string;
+};
 
 export default async function Page() {
   const session = (await cookies()).get("dxp_user");
@@ -10,5 +13,17 @@ export default async function Page() {
     redirect("/login");
   }
 
-  return <Project/>;
+  let role: string | undefined;
+
+  try {
+    role = (JSON.parse(session.value) as SessionCookie).role;
+  } catch {
+    redirect("/login");
+  }
+
+  if (role === "mentor") {
+    redirect("/mentor");
+  }
+
+  redirect("/student");
 }
