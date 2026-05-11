@@ -20,6 +20,10 @@ interface Project {
   compensation_amount: number;
 }
 
+interface ConfirmedProposalRow {
+  project: Project | Project[] | null;
+}
+
 // ─── Countdown hook ───────────────────────────────────────────────────────────
 function useCountdown(targetDate: string | null) {
   const [timeLeft, setTimeLeft] = useState<string | null>(null);
@@ -236,7 +240,6 @@ function ActiveProjectCard({ project, onClick }: { project: Project; onClick: ()
 export default function Project() {
   const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [chatOpen, setChatOpen] = useState(false);
   const [projects, setProjects] = useState<Project[]>([]);
   const [activeProjects, setActiveProjects] = useState<Project[]>([]);
   const [search, setSearch] = useState("");
@@ -292,10 +295,12 @@ export default function Project() {
 
         if (myProposals) {
             const active = myProposals
-            .map((p: any) => p.project)
+            .map((proposal: ConfirmedProposalRow) =>
+              Array.isArray(proposal.project) ? proposal.project[0] : proposal.project
+            )
             .filter(Boolean);
 
-            setActiveProjects(active);
+            setActiveProjects(active as Project[]);
         }
         }
 

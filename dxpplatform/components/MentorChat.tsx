@@ -39,6 +39,7 @@ export default function MentorChat({ isOpen, onClose }: MentorChatProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(true);
   const [isMinimised, setIsMinimised] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
 
   // Position & size state
   const [pos, setPos] = useState({ x: 0, y: 0 });
@@ -48,6 +49,7 @@ export default function MentorChat({ isOpen, onClose }: MentorChatProps) {
   const windowRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const messageIdRef = useRef(0);
 
   // Drag state
   const dragging = useRef(false);
@@ -60,13 +62,17 @@ export default function MentorChat({ isOpen, onClose }: MentorChatProps) {
   // Place window bottom-right on first open
   useEffect(() => {
     if (isOpen && !initialised) {
-      const vw = window.innerWidth;
-      const vh = window.innerHeight;
-      const w = Math.min(DEFAULT_WIDTH, vw - 32);
-      const h = Math.min(DEFAULT_HEIGHT, vh - 80);
-      setSize({ w, h });
-      setPos({ x: vw - w - 24, y: vh - h - 24 });
-      setInitialised(true);
+      const frameId = window.requestAnimationFrame(() => {
+        const vw = window.innerWidth;
+        const vh = window.innerHeight;
+        const w = Math.min(DEFAULT_WIDTH, vw - 32);
+        const h = Math.min(DEFAULT_HEIGHT, vh - 80);
+        setSize({ w, h });
+        setPos({ x: vw - w - 24, y: vh - h - 24 });
+        setInitialised(true);
+      });
+
+      return () => window.cancelAnimationFrame(frameId);
     }
   }, [isOpen, initialised]);
 
@@ -89,6 +95,7 @@ export default function MentorChat({ isOpen, onClose }: MentorChatProps) {
   // ── Drag ──────────────────────────────────────────────
   const onDragStart = useCallback((e: React.MouseEvent | React.TouchEvent) => {
     dragging.current = true;
+    setIsDragging(true);
     const clientX = "touches" in e ? e.touches[0].clientX : e.clientX;
     const clientY = "touches" in e ? e.touches[0].clientY : e.clientY;
     dragOffset.current = {
@@ -107,6 +114,7 @@ export default function MentorChat({ isOpen, onClose }: MentorChatProps) {
 
     const up = () => {
       dragging.current = false;
+      setIsDragging(false);
       window.removeEventListener("mousemove", move);
       window.removeEventListener("mouseup", up);
       window.removeEventListener("touchmove", move);
@@ -147,9 +155,10 @@ export default function MentorChat({ isOpen, onClose }: MentorChatProps) {
   const sendMessage = async (text: string) => {
     if (!text.trim() || isLoading) return;
     setShowSuggestions(false);
+    messageIdRef.current += 1;
 
     const userMessage: Message = {
-      id: Date.now().toString(),
+      id: `user-${messageIdRef.current}`,
       role: "user",
       content: text.trim(),
       timestamp: new Date(),
@@ -168,15 +177,17 @@ export default function MentorChat({ isOpen, onClose }: MentorChatProps) {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Request failed");
+      messageIdRef.current += 1;
       setMessages(prev => [...prev, {
-        id: Date.now().toString(),
+        id: `assistant-${messageIdRef.current}`,
         role: "assistant",
         content: data.content,
         timestamp: new Date(),
       }]);
     } catch {
+      messageIdRef.current += 1;
       setMessages(prev => [...prev, {
-        id: Date.now().toString(),
+        id: `assistant-${messageIdRef.current}`,
         role: "assistant",
         content: "Sorry, something went wrong. Please try again.",
         timestamp: new Date(),
@@ -218,7 +229,7 @@ export default function MentorChat({ isOpen, onClose }: MentorChatProps) {
         border: "1px solid rgba(0,0,0,0.08)",
         background: "white",
         transition: isMinimised ? "height 0.2s ease" : "none",
-        userSelect: dragging.current ? "none" : "auto",
+        userSelect: isDragging ? "none" : "auto",
       }}
     >
       {/* ── Header / drag handle ── */}
