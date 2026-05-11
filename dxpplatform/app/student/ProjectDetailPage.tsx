@@ -9,6 +9,7 @@ import ProblemOverview from "@/components/ProblemOverview";
 import Sidebar from "@/components/Sidebar";
 import SubmitProposal from "@/components/SubmitProposal";
 import Topbar from "@/components/Topbar";
+import type { MentorChatContext } from "@/components/MentorChat";
 import { createClient } from "@/lib/supabase/client";
 
 interface Project {
@@ -44,6 +45,14 @@ interface WeeklyLog {
   tasks_planned: string;
   blockers: string | null;
   submitted_at: string;
+}
+
+interface CurrentUser {
+  id: string;
+  email: string | null;
+  role: string | null;
+  kabelUserId: string | null;
+  name: string;
 }
 
 function formatCurrency(value: number | null) {
@@ -132,6 +141,7 @@ export default function ProjectDetailPage() {
   const [project, setProject] = useState<Project | null>(null);
   const [myProposal, setMyProposal] = useState<Proposal | null>(null);
   const [myLogs, setMyLogs] = useState<WeeklyLog[]>([]);
+  const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -151,10 +161,16 @@ export default function ProjectDetailPage() {
       setError(null);
       const supabase = createClient();
 
-      const [{ data: projectData, error: projectError }, { data: userData }] = await Promise.all([
+      const [projectResult, meResult] = await Promise.all([
         supabase.from("project").select("*").eq("id", projectId).maybeSingle(),
-        supabase.auth.getUser(),
+        fetch("/api/me").then(async (response) => {
+          if (!response.ok) return { user: null as CurrentUser | null };
+          return (await response.json()) as { user: CurrentUser | null };
+        }),
       ]);
+
+      const { data: projectData, error: projectError } = projectResult;
+      setCurrentUser(meResult.user);
 
       if (projectError) {
         setError(projectError.message);
@@ -164,7 +180,7 @@ export default function ProjectDetailPage() {
 
       setProject(projectData);
 
-      const user = userData.user;
+      const user = meResult.user;
       if (user && projectData) {
         const { data: proposalData } = await supabase
           .from("proposal")
@@ -199,9 +215,7 @@ export default function ProjectDetailPage() {
     setSubmitting(true);
     setError(null);
     const supabase = createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const user = currentUser;
 
     if (!user) {
       setError("Please log in before submitting a proposal.");
@@ -241,9 +255,7 @@ export default function ProjectDetailPage() {
     setSubmittingLog(true);
     setError(null);
     const supabase = createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const user = currentUser;
 
     if (!user) {
       setError("Please log in before submitting a weekly log.");
@@ -280,6 +292,18 @@ export default function ProjectDetailPage() {
   const topbarDeadline = project?.submission_end_date
     ? `Due ${formatDeadline(project.submission_end_date)}`
     : null;
+  const mentorContext: MentorChatContext | undefined = project
+    ? {
+        userId: currentUser?.id ?? null,
+        userName: currentUser?.name ?? null,
+        projectId: project.id,
+        projectTitle: project.title,
+        companyName: project.company_name,
+        companyIndustry: project.company_industry,
+        durationWeeks: project.project_duration_weeks,
+        submissionEndDate: project.submission_end_date,
+      }
+    : undefined;
 
   return (
     <div className="flex h-screen bg-gray-50 overflow-hidden">
@@ -469,7 +493,7 @@ export default function ProjectDetailPage() {
                       </div>
                       <div className="bg-gray-50 rounded-lg p-3">
                         <p className="text-[11px] text-gray-400 mb-1">Email</p>
-                        <p className="text-[13px] font-medium text-gray-800 break-words">{project.company_pic_email ?? "TBD"}</p>
+                        <p className="text-[13px] font-medium text-gray-800 wrap-break-word">{project.company_pic_email ?? "TBD"}</p>
                       </div>
                       <div className="bg-gray-50 rounded-lg p-3">
                         <p className="text-[11px] text-gray-400 mb-1">Website</p>
@@ -478,7 +502,7 @@ export default function ProjectDetailPage() {
                             href={project.company_website}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="text-[13px] font-medium text-indigo-700 hover:text-indigo-900 break-words"
+                            className="text-[13px] font-medium text-indigo-700 hover:text-indigo-900 wrap-break-word"
                           >
                             {project.company_website.replace(/^https?:\/\//, "")}
                           </a>
@@ -493,7 +517,12 @@ export default function ProjectDetailPage() {
             </div>
           </div>
 
-          <MentorChat isOpen={chatOpen} onClose={() => setChatOpen(false)} />
+          <MentorChat
+            key={`${mentorContext?.userId ?? "guest"}-${mentorContext?.projectId ?? "no-project"}`}
+            isOpen={chatOpen}
+            onClose={() => setChatOpen(false)}
+            context={mentorContext}
+          />
         </div>
       </div>
     </div>

@@ -1,31 +1,64 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const SYSTEM_PROMPT = `You are Aria, a friendly and knowledgeable project mentor embedded in a project management platform called Kabel DXP. 
+interface ChatContext {
+  userId?: string | null;
+  userName?: string | null;
+  projectId?: string | null;
+  projectTitle?: string | null;
+  companyName?: string | null;
+  companyIndustry?: string | null;
+  durationWeeks?: number | null;
+  submissionEndDate?: string | null;
+}
 
-The user is Tok Pei Ying, a student working on the "Budget Planning Workflow" project for an ICT infrastructure distributor.
+interface ChatMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+function formatDate(value?: string | null) {
+  if (!value) return "Not provided";
+  return new Date(value).toLocaleDateString("en-MY", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+}
+
+function buildSystemPrompt(context?: ChatContext) {
+  const userName = context?.userName ?? "the student";
+  const projectTitle = context?.projectTitle ?? "the selected project";
+  const companyName = context?.companyName ?? "the project company";
+  const companyIndustry = context?.companyIndustry ?? "the relevant industry";
+  const duration = context?.durationWeeks ? `${context.durationWeeks} weeks` : "Not provided";
+
+  return `You are Thinkra, a friendly and knowledgeable project mentor embedded in a project management platform called Kabel DXP.
 
 Project context:
-- The project requires building a centralised budget planning system that consolidates HOD budget submissions
-- Submission deadline: 30 April 2026 (3 days left)
-- Project duration: 8 weeks starting 11 May 2026
+- User name: ${userName}
+- User id: ${context?.userId ?? "Not provided"}
+- Project id: ${context?.projectId ?? "Not provided"}
+- Project title: ${projectTitle}
+- Company: ${companyName}
+- Industry: ${companyIndustry}
+- Submission deadline: ${formatDate(context?.submissionEndDate)}
+- Project duration: ${duration}
 - Required deliverables: PDF proposal document + pitch video (3-5 minutes)
-- Tech requirements: web/app development, database design, data aggregation, dashboard visualisation
 
-Problem being solved:
-- Budget planning currently managed through disconnected spreadsheets across HR, Finance, and departments
-- No central system to consolidate HOD submissions or link to financial data
-- Issues: high reconciliation effort, data fragmentation, no guardrails for HODs, late gap identification, poor HR-Finance coordination
-
-Your mission as Aria:
+Your mission as Thinkra:
 - Be concise, encouraging, and practical
-- Give actionable advice tailored specifically to this project
+- Give actionable advice tailored specifically to ${projectTitle}
 - Help with proposal structure, tech stack recommendations, pitch video tips, time management
 - Keep responses focused and not too long (max 3-4 short paragraphs)
 - Use a warm, mentor-like tone`;
+}
 
 export async function POST(req: NextRequest) {
   try {
-    const { messages } = await req.json();
+    const { messages, context } = (await req.json()) as {
+      messages: ChatMessage[];
+      context?: ChatContext;
+    };
 
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) {
@@ -45,7 +78,7 @@ export async function POST(req: NextRequest) {
       body: JSON.stringify({
         model: "claude-sonnet-4-20250514",
         max_tokens: 1024,
-        system: SYSTEM_PROMPT,
+        system: buildSystemPrompt(context),
         messages,
       }),
     });

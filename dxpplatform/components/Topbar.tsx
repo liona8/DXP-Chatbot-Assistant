@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { ChevronLeft, MessageCircle, Menu } from "lucide-react";
 
 interface TopbarProps {
@@ -11,6 +12,7 @@ interface TopbarProps {
   durationLabel?: string;
   deadlineLabel?: string | null;
   avatarLabel?: string;
+  backHref?: string;
 }
 
 export default function Topbar({
@@ -22,7 +24,10 @@ export default function Topbar({
   durationLabel = "8 weeks",
   deadlineLabel = "3 days left",
   avatarLabel = "I",
+  backHref = "/student",
 }: TopbarProps) {
+  const router = useRouter();
+
   return (
     <header className="bg-white border-b border-gray-100 px-3 md:px-6 py-3 flex items-center gap-2 md:gap-3 shrink-0">
       <button
@@ -32,7 +37,11 @@ export default function Topbar({
         <Menu size={14} strokeWidth={1.5} />
       </button>
 
-      <button className="hidden lg:flex w-7 h-7 rounded-lg border border-gray-200 items-center justify-center text-gray-400 hover:bg-gray-50 transition-colors">
+      <button
+        onClick={() => router.push(backHref)}
+        className="hidden lg:flex w-7 h-7 rounded-lg border border-gray-200 items-center justify-center text-gray-400 hover:bg-gray-50 transition-colors"
+        aria-label="Back to projects"
+      >
         <ChevronLeft size={14} strokeWidth={1.5} />
       </button>
 

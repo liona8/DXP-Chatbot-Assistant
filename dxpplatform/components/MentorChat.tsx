@@ -7,6 +7,18 @@ import type { Message } from "@/types/chat";
 interface MentorChatProps {
   isOpen: boolean;
   onClose: () => void;
+  context?: MentorChatContext;
+}
+
+export interface MentorChatContext {
+  userId?: string | null;
+  userName?: string | null;
+  projectId?: string | null;
+  projectTitle?: string | null;
+  companyName?: string | null;
+  companyIndustry?: string | null;
+  durationWeeks?: number | null;
+  submissionEndDate?: string | null;
 }
 
 const SUGGESTIONS = [
@@ -28,11 +40,17 @@ const MIN_WIDTH = 280;
 const MIN_HEIGHT = 320;
 const HEADER_HEIGHT = 52;
 
-export default function MentorChat({ isOpen, onClose }: MentorChatProps) {
+function buildWelcomeMessage(context?: MentorChatContext) {
+  const name = context?.userName ?? "there";
+  const projectTitle = context?.projectTitle ?? "this project";
+  return `Hi ${name}! I'm Thinkra, your project mentor for ${projectTitle}. Feel free to ask anything.`;
+}
+
+export default function MentorChat({ isOpen, onClose, context }: MentorChatProps) {
   const [messages, setMessages] = useState<Message[]>([{
     id: "welcome",
     role: "assistant",
-    content: "Hi Pei Ying! I'm Aria, your project mentor for the Budget Planning Workflow. Feel free to ask anything.👋",
+    content: buildWelcomeMessage(context),
     timestamp: new Date(),
   }]);
   const [input, setInput] = useState("");
@@ -173,7 +191,7 @@ export default function MentorChat({ isOpen, onClose }: MentorChatProps) {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: history }),
+        body: JSON.stringify({ messages: history, context }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Request failed");
@@ -375,7 +393,7 @@ export default function MentorChat({ isOpen, onClose }: MentorChatProps) {
               value={input}
               onChange={autoResize}
               onKeyDown={handleKeyDown}
-              placeholder="Ask Aria anything about this project..."
+              placeholder="Ask Thinkra anything about this project..."
               rows={1}
               style={{
                 flex: 1, resize: "none", border: "1px solid #e5e7eb",
@@ -427,3 +445,4 @@ export default function MentorChat({ isOpen, onClose }: MentorChatProps) {
     </div>
   );
 }
+
