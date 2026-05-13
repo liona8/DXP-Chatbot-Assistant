@@ -134,22 +134,15 @@ function WeeklySignalsContent() {
   // Load mentor + projects
   useEffect(() => {
     const boot = async () => {
-      const supabase = createClient();
       const user = await getCurrentUser();
       if (!user || user.role !== "mentor") return;
       setMentorId(user.id);
 
-      const { data: assignments } = await supabase
-        .from("mentor_assignment")
-        .select(
-          "project_id, project:project(id, title, company_name, project_duration_weeks, project_start_date, status)"
-        )
-        .eq("mentor_id", user.id);
+      const response = await fetch("/api/mentor/overview", { cache: "no-store" });
+      if (!response.ok) throw new Error("Failed to load mentor projects");
 
-      const projList: Project[] = (assignments ?? [])
-        .map((a: any) => a.project)
-        .filter(Boolean)
-        .filter((p: any) => p.status === "in_progress");
+      const data = (await response.json()) as { projects: (Project & { status: string })[] };
+      const projList = (data.projects ?? []).filter((p) => p.status === "in_progress");
 
       setProjects(projList);
       if (!selectedProjectId && projList.length > 0) {
@@ -165,64 +158,40 @@ function WeeklySignalsContent() {
     if (!selectedProjectId || !mentorId) return;
 
     const loadProject = async () => {
-      const supabase = createClient();
       setLoading(true);
 
       const proj = projects.find((p) => p.id === selectedProjectId);
       if (!proj) return;
       setProject(proj);
 
-      const today = new Date();
-      const startDate = proj.project_start_date ? new Date(proj.project_start_date) : null;
-      const week = startDate
-        ? Math.min(
-            Math.max(
-              Math.ceil((today.getTime() - startDate.getTime()) / (7 * 24 * 60 * 60 * 1000)),
-              1
-            ),
-            proj.project_duration_weeks
-          )
-        : 1;
+      const response = await fetch(`/api/mentor/projects/${selectedProjectId}`, {
+        cache: "no-store",
+      });
+      if (!response.ok) throw new Error("Failed to load mentor project signals");
+
+      const data = (await response.json()) as {
+        currentWeek: number;
+        candidates: Candidate[];
+        signals: any[];
+        exceptions: any[];
+      };
+      const week = data.currentWeek;
       setCurrentWeek(week);
 
-      // Candidates
-      const { data: agreements } = await supabase
-        .from("signed_agreement")
-        .select(
-          "candidate_id, candidate:user!signed_agreement_candidate_id_fkey(id, name, email)"
-        )
-        .eq("project_id", selectedProjectId);
-
-      const cands: Candidate[] = (agreements ?? []).map((a: any) => ({
-        id: a.candidate?.id,
-        name: a.candidate?.name,
-        email: a.candidate?.email,
+      const cands = data.candidates.map((candidate) => ({
+        id: candidate.id,
+        name: candidate.name,
+        email: candidate.email,
       }));
       setCandidates(cands);
       setActiveCandidateIdx(0);
-
-      // Existing signals for this week
-      const { data: signals } = await supabase
-        .from("mentor_weekly_signal")
-        .select("*")
-        .eq("project_id", selectedProjectId)
-        .eq("week_no", week)
-        .eq("mentor_id", mentorId);
-
-      // Existing exceptions
-      const { data: exceptions } = await supabase
-        .from("exception_event")
-        .select("*")
-        .eq("project_id", selectedProjectId)
-        .eq("week_no", week)
-        .eq("mentor_id", mentorId);
 
       const newForms: Record<string, SignalForm> = {};
       const newSaved = new Set<string>();
 
       for (const c of cands) {
-        const sig = signals?.find((s: any) => s.candidate_id === c.id);
-        const candExceptions = (exceptions ?? []).filter(
+        const sig = data.signals.find((s: any) => s.candidate_id === c.id);
+        const candExceptions = data.exceptions.filter(
           (e: any) => e.candidate_id === c.id
         );
 

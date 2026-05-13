@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { createClient } from "@/lib/supabase/client";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { Users, Search, Building2 } from "lucide-react";
 
@@ -16,29 +15,6 @@ type Candidate = {
   signalCount: number;
 };
 
-type MaybeArray<T> = T | T[] | null;
-
-type AssignmentRow = {
-  project_id: string;
-  project: MaybeArray<{
-    id: string;
-    title: string;
-    project_start_date: string | null;
-    project_duration_weeks: number;
-  }>;
-};
-
-type AgreementRow = {
-  project_id: string;
-  candidate_id: string;
-  candidate: { id: string; name: string | null; email: string | null } | null;
-  candidate_profile: { institution: string | null; field_of_study: string | null } | null;
-};
-
-function firstRow<T>(row: MaybeArray<T>) {
-  return Array.isArray(row) ? row[0] ?? null : row;
-}
-
 export default function MentorCandidatesPage() {
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [loading, setLoading] = useState(true);
@@ -46,68 +22,14 @@ export default function MentorCandidatesPage() {
 
   useEffect(() => {
     const load = async () => {
-      const supabase = createClient();
       const user = await getCurrentUser();
       if (!user || user.role !== "mentor") return;
 
-      const { data: assignments } = await supabase
-        .from("mentor_assignment")
-        .select(
-          "project_id, project:project(id, title, project_start_date, project_duration_weeks)"
-        )
-        .eq("mentor_id", user.id);
+      const response = await fetch("/api/mentor/overview", { cache: "no-store" });
+      if (!response.ok) throw new Error("Failed to load mentor candidates");
 
-      if (!assignments) {
-        setLoading(false);
-        return;
-      }
-
-      const projectIds = assignments.map((a) => a.project_id);
-      if (projectIds.length === 0) {
-        setCandidates([]);
-        setLoading(false);
-        return;
-      }
-
-      const { data: agreements } = await supabase
-        .from("signed_agreement")
-        .select(
-          `project_id, candidate_id,
-           candidate:user!signed_agreement_candidate_id_fkey(id, name, email),
-           candidate_profile:candidate_profile(institution, field_of_study)`
-        )
-        .in("project_id", projectIds);
-
-      const list: Candidate[] = [];
-
-      const assignmentRows = (assignments ?? []) as unknown as AssignmentRow[];
-      const agreementRows = (agreements ?? []) as unknown as AgreementRow[];
-
-      for (const a of agreementRows) {
-        const proj = firstRow(assignmentRows.find((x) => x.project_id === a.project_id)?.project ?? null);
-        if (!proj) continue;
-
-        // Count signals for this candidate
-        const { count } = await supabase
-          .from("mentor_weekly_signal")
-          .select("id", { count: "exact", head: true })
-          .eq("project_id", a.project_id)
-          .eq("candidate_id", a.candidate_id)
-          .eq("mentor_id", user.id);
-
-        list.push({
-          id: a.candidate?.id ?? a.candidate_id,
-          name: a.candidate?.name ?? "Unknown",
-          email: a.candidate?.email ?? "",
-          institution: a.candidate_profile?.institution ?? null,
-          field_of_study: a.candidate_profile?.field_of_study ?? null,
-          projectTitle: proj.title,
-          projectId: proj.id,
-          signalCount: count ?? 0,
-        });
-      }
-
-      setCandidates(list);
+      const data = (await response.json()) as { candidates: Candidate[] };
+      setCandidates(data.candidates ?? []);
       setLoading(false);
     };
     load();

@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import {
   ArrowLeft,
@@ -65,17 +64,9 @@ type Signal = {
   observation: string | null;
 };
 
-type AgreementRow = {
+type SignalStamp = {
   candidate_id: string;
-  group_id?: string | null;
-  candidate: { id: string; name: string | null; email: string | null } | null;
-  candidate_profile: { institution: string | null; field_of_study: string | null } | null;
-};
-
-type ProposalRow = {
-  candidate_id: string | null;
-  group_id: string | null;
-  proposal_pdf_url: string | null;
+  week_no: number;
 };
 
 type ExecutiveSummary = {
@@ -83,7 +74,7 @@ type ExecutiveSummary = {
   todos?: string | unknown[];
   blockers?: unknown;
   discussion_points?: string | string[];
-  risk_rating?: string;
+  risk_rating?: string | { level?: string; explanation?: string };
 };
 
 const healthColor: Record<string, string> = {
@@ -98,25 +89,34 @@ const healthTextColor: Record<string, string> = {
   critical: "text-red-700 bg-red-50 border-red-200",
 };
 
-function WeekBar({
+function SignalWeekBox({
   week,
-  status,
+  done,
+  total,
   current,
 }: {
   week: number;
-  status?: string;
+  done: number;
+  total: number;
   current: number;
 }) {
   const isFuture = week > current;
-  const color = status
-    ? healthColor[status] ?? "bg-gray-300"
+  const complete = total > 0 && done >= total;
+  const partial = done > 0 && done < total;
+  const styles = complete
+    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+    : partial
+    ? "border-amber-200 bg-amber-50 text-amber-700"
     : isFuture
-    ? "bg-gray-200"
-    : "bg-gray-300";
+    ? "border-gray-200 bg-white text-gray-400"
+    : "border-gray-200 bg-gray-50 text-gray-500";
+
   return (
-    <div className="flex flex-col items-center gap-1">
-      <div className={`w-10 h-8 rounded ${color}`} />
-      <span className="text-[10px] text-gray-400">{week}</span>
+    <div className={`h-12 min-w-20 rounded-lg border px-3 py-2 text-center ${styles}`}>
+      <div className="text-[10px] font-semibold uppercase leading-none">W{week}</div>
+      <div className="mt-1 text-xs font-bold">
+        {done}/{total}
+      </div>
     </div>
   );
 }
@@ -133,6 +133,19 @@ function summaryText(value: unknown) {
   return typeof value === "string" ? value : JSON.stringify(value);
 }
 
+function riskRatingInfo(value: ExecutiveSummary["risk_rating"]) {
+  if (!value) return null;
+
+  if (typeof value === "string") {
+    return { label: value, detail: null };
+  }
+
+  return {
+    label: value.level ?? "unknown",
+    detail: value.explanation ?? null,
+  };
+}
+
 export default function MentorProjectDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -143,110 +156,42 @@ export default function MentorProjectDetailPage() {
   const [allHealth, setAllHealth] = useState<HealthLog[]>([]);
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [signals, setSignals] = useState<Signal[]>([]);
+  const [allSignals, setAllSignals] = useState<SignalStamp[]>([]);
   const [currentWeek, setCurrentWeek] = useState(1);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const load = async () => {
-      const supabase = createClient();
       const user = await getCurrentUser();
       if (!user || user.role !== "mentor") {
         router.push("/login");
         return;
       }
 
-      // Verify assignment
-      const { data: assignment } = await supabase
-        .from("mentor_assignment")
-        .select("id")
-        .eq("project_id", projectId)
-        .eq("mentor_id", user.id)
-        .single();
-      if (!assignment) {
+      const response = await fetch(`/api/mentor/projects/${projectId}`, { cache: "no-store" });
+      if (response.status === 403 || response.status === 404) {
         router.push("/mentor/projects");
         return;
       }
+      if (!response.ok) throw new Error("Failed to load mentor project");
 
-      // Project
-      const { data: proj } = await supabase
-        .from("project")
-        .select(
-          "id, title, company_name, company_website, problem_statement, project_scope, requirements, project_start_date, project_duration_weeks, status, max_candidates"
-        )
-        .eq("id", projectId)
-        .single();
-      if (!proj) return;
-      setProject(proj);
+      const data = (await response.json()) as {
+        project: Project;
+        currentWeek: number;
+        health: HealthLog | null;
+        allHealth: HealthLog[];
+        candidates: Candidate[];
+        signals: Signal[];
+        allSignals: SignalStamp[];
+      };
 
-      const startDate = proj.project_start_date ? new Date(proj.project_start_date) : null;
-      const today = new Date();
-      const week = startDate
-        ? Math.min(
-            Math.max(
-              Math.ceil((today.getTime() - startDate.getTime()) / (7 * 24 * 60 * 60 * 1000)),
-              1
-            ),
-            proj.project_duration_weeks
-          )
-        : 1;
-      setCurrentWeek(week);
-
-      // Health logs
-      const { data: healthLogs } = await supabase
-        .from("project_health_log")
-        .select("week_number, health_score, status, red_flags, recommendations, summary, executive_summary")
-        .eq("project_id", projectId)
-        .order("week_number", { ascending: true });
-      setAllHealth(healthLogs ?? []);
-
-      const latestHealth = healthLogs?.slice(-1)[0] ?? null;
-      setHealth(latestHealth);
-
-      // Candidates via signed_agreement
-      const { data: agreements } = await supabase
-        .from("signed_agreement")
-        .select(
-          `candidate_id, 
-           candidate:user!signed_agreement_candidate_id_fkey(id, name, email),
-           candidate_profile:candidate_profile(institution, field_of_study)`
-        )
-        .eq("project_id", projectId);
-
-      // Also get proposals for "View Proposal" links
-      const { data: proposals } = await supabase
-        .from("proposal")
-        .select("id, candidate_id, group_id, proposal_pdf_url, status")
-        .eq("project_id", projectId)
-        .in("status", ["confirmed", "selected"]);
-
-      const proposalRows = (proposals ?? []) as unknown as ProposalRow[];
-      const candidateList: Candidate[] = ((agreements ?? []) as unknown as AgreementRow[]).map((a) => {
-        const proposal = proposalRows.find(
-          (p) =>
-            p.candidate_id === a.candidate_id ||
-            (p.group_id && a.group_id && p.group_id === a.group_id)
-        );
-        return {
-          id: a.candidate?.id ?? a.candidate_id,
-          name: a.candidate?.name ?? "Unknown",
-          email: a.candidate?.email ?? "",
-          institution: a.candidate_profile?.institution ?? null,
-          field_of_study: a.candidate_profile?.field_of_study ?? null,
-          proposal_url: proposal?.proposal_pdf_url ?? null,
-          is_group: false,
-          group_name: null,
-        };
-      });
-      setCandidates(candidateList);
-
-      // Signals for current week
-      const { data: sigs } = await supabase
-        .from("mentor_weekly_signal")
-        .select("candidate_id, week_no, prepared, clarity, follow_through, prompting, no_show, observation")
-        .eq("project_id", projectId)
-        .eq("week_no", week)
-        .eq("mentor_id", user.id);
-      setSignals(sigs ?? []);
+      setProject(data.project);
+      setCurrentWeek(data.currentWeek);
+      setAllHealth(data.allHealth);
+      setHealth(data.health);
+      setCandidates(data.candidates);
+      setSignals(data.signals);
+      setAllSignals(data.allSignals);
 
       setLoading(false);
     };
@@ -276,6 +221,17 @@ export default function MentorProjectDetailPage() {
     : "TBD";
 
   const execSummary = health?.executive_summary as ExecutiveSummary | null | undefined;
+  const riskRating = riskRatingInfo(execSummary?.risk_rating);
+  const riskLevel = riskRating?.label.toLowerCase();
+  const totalSignalsExpected = candidates.length * project.project_duration_weeks;
+  const signalProgressPct =
+    totalSignalsExpected > 0
+      ? Math.round((allSignals.length / totalSignalsExpected) * 100)
+      : 0;
+  const signalCountByWeek = new Map<number, number>();
+  for (const signal of allSignals) {
+    signalCountByWeek.set(signal.week_no, (signalCountByWeek.get(signal.week_no) ?? 0) + 1);
+  }
 
   // Missing submissions: candidates without signal this week
   const missingCandidateIds = candidates
@@ -283,35 +239,36 @@ export default function MentorProjectDetailPage() {
     .map((c) => c.name);
 
   return (
-    <div className="max-w-4xl mx-auto p-8">
+    <div className="max-w-5xl mx-auto px-8 py-6">
       {/* Header */}
       <div className="flex items-center gap-4 mb-6">
         <Link
           href="/mentor/projects"
-          className="w-8 h-8 rounded-lg border border-gray-200 flex items-center justify-center hover:bg-gray-50 transition-colors"
+          className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-gray-100 transition-colors"
+          aria-label="Back to projects"
         >
           <ArrowLeft className="w-4 h-4 text-gray-500" />
         </Link>
 
-        <div className="w-10 h-10 rounded-xl bg-indigo-100 text-indigo-700 font-bold text-base flex items-center justify-center shrink-0">
+        <div className="w-12 h-12 rounded-xl bg-indigo-50 border border-indigo-100 text-indigo-700 font-bold text-base flex items-center justify-center shrink-0 shadow-sm">
           {project.title[0]}
         </div>
 
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-3 flex-wrap">
             <h1 className="font-bold text-gray-900 text-xl">{project.title}</h1>
-            <span className="text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200 rounded-full px-2.5 py-0.5">
+            <span className="text-[11px] font-semibold bg-blue-50 text-blue-700 border border-blue-200 rounded-full px-2.5 py-0.5">
               In Progress
             </span>
           </div>
           <p className="text-sm text-gray-500">
-            {project.company_name} · Week {currentWeek} of {project.project_duration_weeks}
+            {project.company_name} - Week {currentWeek} of {project.project_duration_weeks}
           </p>
         </div>
 
         <Link
           href={`/mentor/weekly-signals?project=${project.id}`}
-          className="flex items-center gap-2 bg-indigo-600 text-white text-sm font-semibold px-4 py-2 rounded-xl hover:bg-indigo-700 transition-colors"
+          className="flex items-center gap-2 bg-indigo-600 text-white text-sm font-semibold px-4 py-2 rounded-lg shadow-sm hover:bg-indigo-700 transition-colors"
         >
           <ClipboardList className="w-4 h-4" />
           Capture Signals
@@ -321,26 +278,40 @@ export default function MentorProjectDetailPage() {
       <div className="space-y-5">
         {/* Signal Progress */}
         <section className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center justify-between mb-5">
             <div className="flex items-center gap-2">
               <ClipboardList className="w-4 h-4 text-indigo-500" />
               <h2 className="font-semibold text-gray-900">Signal Progress</h2>
             </div>
-            <span className="text-sm text-gray-500">
+            <span className="text-sm font-semibold text-indigo-700">
+              {signalProgressPct}%
               {/* total signals = candidates × weeks logged */}
             </span>
           </div>
 
-          {/* Week bars */}
-          <div className="flex gap-2 mb-3 flex-wrap">
+          <div className="mb-4">
+            <div className="flex items-center justify-between text-xs text-gray-500 mb-2">
+              <span>
+                {allSignals.length} of {totalSignalsExpected} signals logged
+              </span>
+            </div>
+            <div className="h-2 rounded-full bg-gray-200 overflow-hidden">
+              <div
+                className="h-full rounded-full bg-gray-900"
+                style={{ width: `${Math.min(signalProgressPct, 100)}%` }}
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2 mb-3">
             {Array.from({ length: project.project_duration_weeks }, (_, i) => {
               const w = i + 1;
-              const log = allHealth.find((h) => h.week_number === w);
               return (
-                <WeekBar
+                <SignalWeekBox
                   key={w}
                   week={w}
-                    status={log?.status}
+                  done={signalCountByWeek.get(w) ?? 0}
+                  total={candidates.length}
                   current={currentWeek}
                 />
               );
@@ -380,19 +351,31 @@ export default function MentorProjectDetailPage() {
               </span>
             </div>
 
-            {/* Health score bars */}
-            <div className="flex gap-1.5 mb-3 flex-wrap">
-              {allHealth.map((h) => (
-                <div
-                  key={h.week_number}
-                  className={`h-8 w-10 rounded ${healthColor[h.status] ?? "bg-gray-200"}`}
-                  title={`Week ${h.week_number}: ${h.health_score}/100`}
-                />
-              ))}
+            <p className="text-xs font-medium text-gray-500 mb-2">Health Score by Week</p>
+            <div className="grid grid-cols-5 sm:grid-cols-10 gap-2 mb-4">
+              {Array.from({ length: project.project_duration_weeks }, (_, i) => {
+                const week = i + 1;
+                const log = allHealth.find((h) => h.week_number === week);
+                return (
+                  <div key={week} className="flex flex-col items-center gap-1">
+                    <div
+                      className={`h-9 w-full rounded ${
+                        log ? healthColor[log.status] ?? "bg-gray-200" : "bg-gray-100"
+                      }`}
+                      title={
+                        log ? `Week ${week}: ${log.health_score}/100` : `Week ${week}: not analyzed`
+                      }
+                    />
+                    <span className="text-[10px] text-gray-400">{week}</span>
+                  </div>
+                );
+              })}
             </div>
 
             {health.summary && (
-              <p className="text-sm text-gray-600 mb-4">{health.summary}</p>
+              <div className="rounded-xl border border-gray-100 bg-gray-50/60 p-4 mb-4">
+                <p className="text-sm text-gray-600">{health.summary}</p>
+              </div>
             )}
 
             {health.red_flags && health.red_flags.length > 0 && (
@@ -516,27 +499,32 @@ export default function MentorProjectDetailPage() {
                 </div>
               )}
 
-              <div className="flex gap-6 pt-2 border-t border-gray-100">
-                {execSummary.risk_rating && (
-                  <div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-3 border-t border-gray-100">
+                {riskRating && (
+                  <div className="rounded-xl border border-gray-100 bg-gray-50/60 p-4">
                     <p className="text-xs text-gray-400 mb-1">Risk Rating</p>
                     <span
                       className={`inline-flex items-center gap-1.5 text-sm font-semibold capitalize ${
-                        execSummary.risk_rating?.toLowerCase() === "green"
+                        riskLevel === "green"
                           ? "text-emerald-600"
-                          : execSummary.risk_rating?.toLowerCase() === "amber"
+                          : riskLevel === "amber" || riskLevel === "yellow"
                           ? "text-amber-600"
                           : "text-red-600"
                       }`}
                     >
                       <span className="w-2 h-2 rounded-full bg-current inline-block" />
-                      {execSummary.risk_rating}
+                      {riskRating.label}
                     </span>
+                    {riskRating.detail && (
+                      <p className="text-xs text-gray-400 mt-1 max-w-xs">
+                        {riskRating.detail}
+                      </p>
+                    )}
                   </div>
                 )}
 
                 {missingCandidateIds.length > 0 && (
-                  <div>
+                  <div className="rounded-xl border border-gray-100 bg-gray-50/60 p-4">
                     <p className="text-xs text-gray-400 mb-1">Missing Submissions</p>
                     <div className="flex flex-wrap gap-1.5">
                       {missingCandidateIds.map((name) => (
@@ -556,8 +544,8 @@ export default function MentorProjectDetailPage() {
         )}
 
         {/* Project info grid */}
-        <div className="grid grid-cols-2 gap-5">
-          <section className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+          <section className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 lg:col-span-2">
             <h2 className="font-semibold text-gray-900 mb-3">Problem Overview</h2>
             <p className="text-sm text-gray-600 leading-relaxed">{project.problem_statement}</p>
           </section>
@@ -610,21 +598,21 @@ export default function MentorProjectDetailPage() {
         </div>
 
         {project.project_scope && (
-          <section className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+          <section className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 lg:w-[calc(66.666%_-_0.875rem)]">
             <h2 className="font-semibold text-gray-900 mb-2">Candidates&apos; Mission</h2>
             <p className="text-sm text-gray-600 leading-relaxed">{project.project_scope}</p>
           </section>
         )}
 
         {project.requirements && (
-          <section className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+          <section className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 lg:w-[calc(66.666%_-_0.875rem)]">
             <h2 className="font-semibold text-gray-900 mb-2">Technical Requirements</h2>
             <p className="text-sm text-gray-600 leading-relaxed">{project.requirements}</p>
           </section>
         )}
 
         {/* Candidates */}
-        <section className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+        <section className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 lg:w-[calc(66.666%_-_0.875rem)]">
           <div className="flex items-center gap-2 mb-4">
             <Users className="w-4 h-4 text-indigo-500" />
             <h2 className="font-semibold text-gray-900">Confirmed Candidates</h2>

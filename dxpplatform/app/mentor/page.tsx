@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/client";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import {
   FolderOpen,
@@ -34,25 +33,6 @@ type Stats = {
   signalsCaptured: number;
 };
 
-type MaybeArray<T> = T | T[] | null;
-
-type AssignmentRow = {
-  project_id: string;
-  project: MaybeArray<{
-    id: string;
-    title: string;
-    company_name: string;
-    project_duration_weeks: number;
-    project_start_date: string | null;
-    status: string;
-    max_candidates: number;
-  }>;
-};
-
-function firstRow<T>(row: MaybeArray<T>) {
-  return Array.isArray(row) ? row[0] ?? null : row;
-}
-
 function getGreeting() {
   const h = new Date().getHours();
   if (h < 12) return "Good morning";
@@ -83,112 +63,17 @@ export default function MentorDashboard() {
   useEffect(() => {
     const load = async () => {
       try {
-        const supabase = createClient();
         const user = await getCurrentUser();
         if (!user || user.role !== "mentor") return;
 
         setMentor({ id: user.id, name: user.name });
 
-        // Fetch assignments for this mentor
-        const { data: assignments, error: assignmentsError } = await supabase
-          .from("mentor_assignment")
-          .select(
-            `project_id, project:project(id, title, company_name, project_duration_weeks, project_start_date, status, max_candidates)`
-          )
-          .eq("mentor_id", user.id);
+        const response = await fetch("/api/mentor/overview", { cache: "no-store" });
+        if (!response.ok) throw new Error("Failed to load mentor overview");
 
-        if (assignmentsError) throw assignmentsError;
-        if (!assignments) return;
-
-        const projectIds = assignments.map((a) => a.project_id);
-
-        // Get confirmed candidates per project
-        const { data: agreements, error: agreementsError } =
-          projectIds.length > 0
-            ? await supabase
-                .from("signed_agreement")
-                .select("project_id, candidate_id")
-                .in("project_id", projectIds)
-            : { data: [], error: null };
-
-        if (agreementsError) throw agreementsError;
-
-        // Get signals this week for all projects
-        const today = new Date();
-
-        let totalCandidates = 0;
-        let signalsPending = 0;
-        let signalsCaptured = 0;
-
-        const projectList: Project[] = [];
-
-        for (const assignment of (assignments ?? []) as unknown as AssignmentRow[]) {
-          const proj = firstRow(assignment.project);
-          if (!proj) continue;
-
-          const startDate = proj.project_start_date
-            ? new Date(proj.project_start_date)
-            : null;
-          const currentWeek = startDate
-            ? Math.min(
-                Math.max(
-                  Math.ceil(
-                    (today.getTime() - startDate.getTime()) /
-                      (7 * 24 * 60 * 60 * 1000)
-                  ),
-                  1
-                ),
-                proj.project_duration_weeks
-              )
-            : 1;
-
-          const projCandidates = (agreements ?? []).filter(
-            (a) => a.project_id === proj.id
-          );
-          const candidateCount = projCandidates.length;
-          totalCandidates += candidateCount;
-
-          // Signals captured this week
-          const { data: signals, error: signalsError } = await supabase
-            .from("mentor_weekly_signal")
-            .select("id, candidate_id")
-            .eq("project_id", proj.id)
-            .eq("week_no", currentWeek)
-            .eq("mentor_id", user.id);
-
-          if (signalsError) throw signalsError;
-
-          const done = signals?.length ?? 0;
-          const pending = Math.max(candidateCount - done, 0);
-          signalsPending += pending;
-          signalsCaptured += done;
-
-          const progressPct =
-            proj.project_duration_weeks > 0
-              ? Math.round((currentWeek / proj.project_duration_weeks) * 100)
-              : 0;
-
-          projectList.push({
-            id: proj.id,
-            title: proj.title,
-            company_name: proj.company_name,
-            project_duration_weeks: proj.project_duration_weeks,
-            status: proj.status,
-            currentWeek,
-            candidateCount,
-            signalsDone: done,
-            signalsTotal: candidateCount,
-            progressPct,
-          });
-        }
-
-        setProjects(projectList);
-        setStats({
-          activeProjects: projectList.filter((p) => p.status === "in_progress").length,
-          totalCandidates,
-          signalsPending,
-          signalsCaptured,
-        });
+        const data = (await response.json()) as { projects: Project[]; stats: Stats };
+        setProjects(data.projects ?? []);
+        setStats(data.stats);
       } catch (error) {
         console.error("Failed to load mentor dashboard", error);
       } finally {

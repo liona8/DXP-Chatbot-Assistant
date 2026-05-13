@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import {
   ArrowRight,
@@ -29,41 +28,6 @@ type Project = {
   signalsDone: number;
 };
 
-type MaybeArray<T> = T | T[] | null;
-
-type AssignmentRow = {
-  project_id: string;
-  project: MaybeArray<{
-    id: string;
-    title: string;
-    company_name: string;
-    company_industry: string | null;
-    problem_statement: string | null;
-    project_duration_weeks: number;
-    project_start_date: string | null;
-    status: string;
-  }>;
-};
-
-function firstRow<T>(row: MaybeArray<T>) {
-  return Array.isArray(row) ? row[0] ?? null : row;
-}
-
-function isPresent<T>(value: T | null | undefined): value is T {
-  return value != null;
-}
-
-function currentProjectWeek(startDate: string | null, duration: number) {
-  if (!startDate) return 1;
-
-  const start = new Date(startDate);
-  const today = new Date();
-  return Math.min(
-    Math.max(Math.ceil((today.getTime() - start.getTime()) / (7 * 24 * 60 * 60 * 1000)), 1),
-    duration || 1
-  );
-}
-
 function statusLabel(status: string) {
   return status
     .split("_")
@@ -79,71 +43,17 @@ export default function MentorProjectsPage() {
 
   useEffect(() => {
     const load = async () => {
-      const supabase = createClient();
       const user = await getCurrentUser();
       if (!user || user.role !== "mentor") {
         router.push("/login");
         return;
       }
 
-      const { data: assignments } = await supabase
-        .from("mentor_assignment")
-        .select(
-          `project_id,
-           project:project(
-             id,
-             title,
-             company_name,
-             company_industry,
-             problem_statement,
-             project_duration_weeks,
-             project_start_date,
-             status
-           )`
-        )
-        .eq("mentor_id", user.id);
+      const response = await fetch("/api/mentor/overview", { cache: "no-store" });
+      if (!response.ok) throw new Error("Failed to load mentor projects");
 
-      const projectRows = ((assignments ?? []) as unknown as AssignmentRow[])
-        .map((assignment) => firstRow(assignment.project))
-        .filter(isPresent);
-
-      const list: Project[] = [];
-
-      for (const project of projectRows) {
-        const currentWeek = currentProjectWeek(
-          project.project_start_date,
-          project.project_duration_weeks
-        );
-
-        const [{ count: candidateCount }, { count: signalsDone }] = await Promise.all([
-          supabase
-            .from("signed_agreement")
-            .select("candidate_id", { count: "exact", head: true })
-            .eq("project_id", project.id),
-          supabase
-            .from("mentor_weekly_signal")
-            .select("id", { count: "exact", head: true })
-            .eq("project_id", project.id)
-            .eq("mentor_id", user.id)
-            .eq("week_no", currentWeek),
-        ]);
-
-        list.push({
-          id: project.id,
-          title: project.title,
-          company_name: project.company_name,
-          company_industry: project.company_industry,
-          problem_statement: project.problem_statement,
-          project_duration_weeks: project.project_duration_weeks,
-          project_start_date: project.project_start_date,
-          status: project.status,
-          candidateCount: candidateCount ?? 0,
-          currentWeek,
-          signalsDone: signalsDone ?? 0,
-        });
-      }
-
-      setProjects(list);
+      const data = (await response.json()) as { projects: Project[] };
+      setProjects(data.projects ?? []);
       setLoading(false);
     };
 
