@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import MentorChat from "@/components/MentorChat";
+import type { MentorChatContext } from "@/components/MentorChat";
 import {
   ArrowLeft,
   Calendar,
@@ -15,6 +17,7 @@ import {
   ClipboardList,
   Globe,
   FileText,
+  MessageCircle,
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -159,6 +162,8 @@ export default function MentorProjectDetailPage() {
   const [allSignals, setAllSignals] = useState<SignalStamp[]>([]);
   const [currentWeek, setCurrentWeek] = useState(1);
   const [loading, setLoading] = useState(true);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [mentorName, setMentorName] = useState<string | null>(null);
 
   useEffect(() => {
     const load = async () => {
@@ -167,6 +172,7 @@ export default function MentorProjectDetailPage() {
         router.push("/login");
         return;
       }
+      setMentorName(user.name);
 
       const response = await fetch(`/api/mentor/projects/${projectId}`, { cache: "no-store" });
       if (response.status === 403 || response.status === 404) {
@@ -237,6 +243,13 @@ export default function MentorProjectDetailPage() {
   const missingCandidateIds = candidates
     .filter((c) => !signals.find((s) => s.candidate_id === c.id))
     .map((c) => c.name);
+  const mentorChatContext: MentorChatContext = {
+    userName: mentorName,
+    projectId: project.id,
+    projectTitle: project.title,
+    companyName: project.company_name,
+    durationWeeks: project.project_duration_weeks,
+  };
 
   return (
     <div className="max-w-5xl mx-auto px-8 py-6">
@@ -266,13 +279,28 @@ export default function MentorProjectDetailPage() {
           </p>
         </div>
 
-        <Link
-          href={`/mentor/weekly-signals?project=${project.id}`}
-          className="flex items-center gap-2 bg-indigo-600 text-white text-sm font-semibold px-4 py-2 rounded-lg shadow-sm hover:bg-indigo-700 transition-colors"
-        >
-          <ClipboardList className="w-4 h-4" />
-          Capture Signals
-        </Link>
+        <div className="flex items-center gap-2 shrink-0">
+          <Link
+            href={`/mentor/weekly-signals?project=${project.id}`}
+            className="flex items-center gap-2 bg-indigo-600 text-white text-sm font-semibold px-4 py-2 rounded-lg shadow-sm hover:bg-indigo-700 transition-colors"
+          >
+            <ClipboardList className="w-4 h-4" />
+            Capture Signals
+          </Link>
+          <button
+            type="button"
+            onClick={() => setChatOpen((open) => !open)}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold shadow-sm transition-colors ${
+              chatOpen
+                ? "bg-indigo-100 text-indigo-700"
+                : "bg-indigo-50 text-indigo-700 hover:bg-indigo-100"
+            }`}
+          >
+            <MessageCircle className="w-4 h-4" />
+            <span className="w-2 h-2 rounded-full bg-emerald-500" />
+            Ask Thinkra
+          </button>
+        </div>
       </div>
 
       <div className="space-y-5">
@@ -673,6 +701,11 @@ export default function MentorProjectDetailPage() {
           </div>
         </section>
       </div>
+      <MentorChat
+        isOpen={chatOpen}
+        onClose={() => setChatOpen(false)}
+        context={mentorChatContext}
+      />
     </div>
   );
 }
