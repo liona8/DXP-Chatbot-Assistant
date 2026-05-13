@@ -1,7 +1,7 @@
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export async function getMentorContext(projectId: string, mentorId: string) {
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   const [
     projectRes,

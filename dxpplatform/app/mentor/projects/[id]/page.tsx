@@ -164,6 +164,7 @@ export default function MentorProjectDetailPage() {
   const [loading, setLoading] = useState(true);
   const [chatOpen, setChatOpen] = useState(false);
   const [mentorName, setMentorName] = useState<string | null>(null);
+  const [mentorId, setMentorId] = useState<string | null>(null);
 
   useEffect(() => {
     const load = async () => {
@@ -173,6 +174,7 @@ export default function MentorProjectDetailPage() {
         return;
       }
       setMentorName(user.name);
+      setMentorId(user.id);
 
       const response = await fetch(`/api/mentor/projects/${projectId}`, { cache: "no-store" });
       if (response.status === 403 || response.status === 404) {
@@ -244,6 +246,8 @@ export default function MentorProjectDetailPage() {
     .filter((c) => !signals.find((s) => s.candidate_id === c.id))
     .map((c) => c.name);
   const mentorChatContext: MentorChatContext = {
+    role: "mentor",
+    userId: mentorId,
     userName: mentorName,
     projectId: project.id,
     projectTitle: project.title,

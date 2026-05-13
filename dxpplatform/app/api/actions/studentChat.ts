@@ -79,7 +79,7 @@ export async function sendStudentMessage(
   });
 
   const model = vertex.getGenerativeModel({
-    model: "gemini-2.0-flash-lite",
+    model: process.env.GEMINI_MODEL ?? "gemini-2.5-flash",
     systemInstruction: systemPrompt,
   });
 

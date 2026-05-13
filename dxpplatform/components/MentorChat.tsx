@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useCallback, KeyboardEvent } from "react";
 import { X, Send, GripHorizontal, Minus } from "lucide-react";
 import type { Message } from "@/types/chat";
+import { getMentorChatSession, sendMentorMessage } from "@/app/api/actions/mentorChat";
 
 interface MentorChatProps {
   isOpen: boolean;
@@ -11,6 +12,7 @@ interface MentorChatProps {
 }
 
 export interface MentorChatContext {
+  role?: "mentor" | "student";
   userId?: string | null;
   userName?: string | null;
   projectId?: string | null;
@@ -55,6 +57,8 @@ export default function MentorChat({ isOpen, onClose, context }: MentorChatProps
   }]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [chatError, setChatError] = useState<string | null>(null);
   const [showSuggestions, setShowSuggestions] = useState(true);
   const [isMinimised, setIsMinimised] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
@@ -68,6 +72,7 @@ export default function MentorChat({ isOpen, onClose, context }: MentorChatProps
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const messageIdRef = useRef(0);
+  const isMentorMode = context?.role === "mentor";
 
   // Drag state
   const dragging = useRef(false);
@@ -109,6 +114,52 @@ export default function MentorChat({ isOpen, onClose, context }: MentorChatProps
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isLoading]);
+
+  useEffect(() => {
+    if (!isOpen || !isMentorMode || !context?.projectId || !context?.userId) return;
+
+    let cancelled = false;
+
+    async function initMentorSession() {
+      const projectId = context?.projectId;
+      const userId = context?.userId;
+      if (!projectId || !userId) return;
+
+      setChatError(null);
+
+      const session = await getMentorChatSession(projectId).catch((error) => {
+        console.error("Mentor chat session error:", error);
+        return null;
+      });
+
+      if (cancelled) return;
+
+      if (!session) {
+        setChatError("Could not load mentor chat history.");
+        return;
+      }
+
+      setSessionId(session.sessionId);
+
+      if (session.messages.length > 0) {
+        setMessages(
+          session.messages.map((message, index) => ({
+            id: `history-${index}`,
+            role: message.sender === "user" ? "user" : "assistant",
+            content: message.content,
+            timestamp: message.created_at ? new Date(message.created_at) : new Date(),
+          }))
+        );
+        setShowSuggestions(false);
+      }
+    }
+
+    initMentorSession();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [context?.projectId, context?.userId, isMentorMode, isOpen]);
 
   // ── Drag ──────────────────────────────────────────────
   const onDragStart = useCallback((e: React.MouseEvent | React.TouchEvent) => {
@@ -187,22 +238,43 @@ export default function MentorChat({ isOpen, onClose, context }: MentorChatProps
     if (textareaRef.current) textareaRef.current.style.height = "auto";
 
     try {
-      const history = [...messages, userMessage].map(m => ({ role: m.role, content: m.content }));
-      const res = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: history, context }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Request failed");
+      let assistantReply: string;
+
+      if (isMentorMode) {
+        if (!context?.projectId || !sessionId) {
+          throw new Error("Mentor chat session is not ready yet");
+        }
+
+        const history = messages
+          .filter((m) => m.id !== "welcome")
+          .map((m) => ({
+            sender: m.role === "user" ? "user" as const : "assistant" as const,
+            content: m.content,
+          }));
+        const data = await sendMentorMessage(context.projectId, sessionId, text.trim(), history);
+        assistantReply = data.reply;
+      } else {
+        const history = [...messages, userMessage].map(m => ({ role: m.role, content: m.content }));
+        const res = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ messages: history, context }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Request failed");
+        assistantReply = data.content;
+      }
+
       messageIdRef.current += 1;
       setMessages(prev => [...prev, {
         id: `assistant-${messageIdRef.current}`,
         role: "assistant",
-        content: data.content,
+        content: assistantReply,
         timestamp: new Date(),
       }]);
-    } catch {
+    } catch (error) {
+      console.error("Chat error:", error);
+      setChatError("Sorry, something went wrong. Please try again.");
       messageIdRef.current += 1;
       setMessages(prev => [...prev, {
         id: `assistant-${messageIdRef.current}`,
@@ -283,10 +355,6 @@ export default function MentorChat({ isOpen, onClose, context }: MentorChatProps
 
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 13, fontWeight: 500, color: "#111827" }}>Thinkra — Project Mentor Assistant</div>
-          <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: "#059669" }}>
-            <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#10b981" }} />
-            Online now
-          </div>
         </div>
 
         {/* Minimise */}
@@ -359,6 +427,11 @@ export default function MentorChat({ isOpen, onClose, context }: MentorChatProps
                     }} />
                   ))}
                 </div>
+              </div>
+            )}
+            {chatError && (
+              <div style={{ alignSelf: "center", fontSize: 11, color: "#dc2626" }}>
+                {chatError}
               </div>
             )}
             <div ref={messagesEndRef} />
