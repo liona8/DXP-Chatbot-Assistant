@@ -37,8 +37,12 @@ interface ActiveProjectData extends Project {
 }
 
 interface ConfirmedProposalRow {
+  id: string;
   project_id: string;
-  status: ProposalStatus;
+  signed_agreement: {
+    signed_at: string | null;
+    candidate_id: string;
+  }[];
 }
 
 interface SignedAgreementRow {
@@ -50,6 +54,28 @@ interface SignedAgreementRow {
 interface ProposalCounts {
   pending: number;
   confirmed: number;
+}
+
+function getInitials(name = "") {
+  return name.trim().split(" ")[0]?.[0]?.toUpperCase() ?? "?";
+}
+ 
+function stripMarkdown(text = "") {
+  return text
+    .replace(/#{1,6}\s+/g, "")
+    .replace(/\*\*(.+?)\*\*/g, "$1")
+    .replace(/\*(.+?)\*/g, "$1")
+    .replace(/\n+/g, " ")
+    .trim();
+}
+ 
+function formatDeadline(dateStr: string | null) {
+  if (!dateStr) return "TBD";
+  return new Date(dateStr).toLocaleDateString("en-MY", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
 }
 
 // ─── Countdown hook ───────────────────────────────────────────────────────────
@@ -66,6 +92,85 @@ const PENDING_PROPOSAL_STATUSES: ProposalStatus[] = [
   "interviewed",
   "selected",
 ];
+
+const Icons = {
+  Dashboard: () => (
+    <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+      <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
+      <rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>
+    </svg>
+  ),
+  Folder: () => (
+    <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"/>
+    </svg>
+  ),
+  File: () => (
+    <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6M7 3h10a2 2 0 012 2v14a2 2 0 01-2 2H7a2 2 0 01-2-2V5a2 2 0 012-2z"/>
+    </svg>
+  ),
+  Book: () => (
+    <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/>
+    </svg>
+  ),
+  Star: () => (
+    <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"/>
+    </svg>
+  ),
+  User: () => (
+    <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
+    </svg>
+  ),
+  ChevronRight: () => (
+    <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7"/>
+    </svg>
+  ),
+  ArrowRight: () => (
+    <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6"/>
+    </svg>
+  ),
+  CheckCircle: () => (
+    <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+    </svg>
+  ),
+  Clock: () => (
+    <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+    </svg>
+  ),
+  Users: () => (
+    <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/>
+    </svg>
+  ),
+  Calendar: () => (
+    <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+    </svg>
+  ),
+  Search: () => (
+    <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+    </svg>
+  ),
+  FileText: () => (
+    <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+    </svg>
+  ),
+  Play: () => (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="white">
+      <path d="M8 5v14l11-7L8 5z"/>
+    </svg>
+  ),
+};
 
 function currentProjectWeek(startDate: string | null, durationWeeks: number) {
   if (!startDate) return 1;
@@ -117,68 +222,72 @@ function useCountdown(targetDate: string | null) {
 }
 
 // ─── Active Project Banner ────────────────────────────────────────────────────
-function ActiveProjectBanner({
-  project,
-  onClick,
-}: {
-  project: ActiveProjectData;
+function ActiveProjectBanner({ project, onClick }: { 
+  project: ActiveProjectData; 
   onClick: () => void;
 }) {
-  const initials = project.company_name
-    .split(" ")
-    .slice(0, 1)
-    .map((w) => w[0])
-    .join("")
-    .toUpperCase();
-
-  const week = project.week_number ?? currentProjectWeek(project.project_start_date, project.project_duration_weeks);
-  const totalWeeks = project.project_duration_weeks;
+  const week = currentProjectWeek(project.project_start_date, project.project_duration_weeks);
   const healthScore = project.health_score ?? 60;
 
   return (
     <div
       onClick={onClick}
-      className="bg-white rounded-2xl border-2 border-green-200 p-5 flex items-center gap-4 cursor-pointer hover:border-green-300 hover:shadow-sm transition-all duration-200"
+      style={{
+        background: "white",
+        border: "2px solid #bbf7d0",
+        borderRadius: 16,
+        padding: "16px 20px",
+        display: "flex",
+        alignItems: "center",
+        gap: 16,
+        cursor: "pointer",
+        transition: "all 0.2s",
+        marginBottom: 12,
+      }}
+      onMouseEnter={e => { e.currentTarget.style.borderColor = "#86efac"; e.currentTarget.style.boxShadow = "0 2px 12px rgba(0,0,0,0.06)"; }}
+      onMouseLeave={e => { e.currentTarget.style.borderColor = "#bbf7d0"; e.currentTarget.style.boxShadow = "none"; }}
     >
-      {/* Company avatar */}
-      <div className="w-12 h-12 rounded-xl bg-indigo-100 flex items-center justify-center shrink-0">
-        <span className="text-indigo-600 font-bold text-lg">{initials}</span>
+      {/* Avatar */}
+      <div style={{
+        width: 44, height: 44, borderRadius: 12,
+        background: "#e0e7ff",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        flexShrink: 0,
+      }}>
+        <span style={{ color: "#4338ca", fontWeight: 800, fontSize: 16 }}>
+          {getInitials(project.company_name)}
+        </span>
       </div>
 
       {/* Info */}
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 mb-0.5">
-          {/* Green check badge */}
-          <svg className="w-4 h-4 text-green-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          <span className="text-[10px] font-bold tracking-widest text-green-600 uppercase">Active Project</span>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 2 }}>
+          <span style={{ color: "#22c55e" }}><Icons.CheckCircle /></span>
+          <span style={{ fontSize: 10, fontWeight: 700, color: "#16a34a", letterSpacing: "1.2px", textTransform: "uppercase" }}>
+            Active Project
+          </span>
         </div>
-        <h3 className="text-[15px] font-bold text-gray-900 truncate">{project.title}</h3>
-        <p className="text-[12px] text-gray-400 mt-0.5">
+        <div style={{ fontSize: 15, fontWeight: 700, color: "#111", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+          {project.title}
+        </div>
+        <div style={{ fontSize: 12, color: "#9ca3af", marginTop: 2 }}>
           {project.company_name}
-          {project.signed_at
-            ? ` · Signed ${new Date(project.signed_at).toLocaleDateString("en-MY", {
-                day: "numeric",
-                month: "short",
-                year: "numeric",
-              })}`
-            : ""}
-        </p>
+          {project.signed_at ? ` · Signed ${new Date(project.signed_at).toLocaleDateString("en-MY", { day: "numeric", month: "short", year: "numeric" })}` : ""}
+        </div>
       </div>
 
-      {/* Week badge */}
-      <div className="shrink-0 flex items-center gap-3">
-        <span className="text-[12px] font-semibold text-gray-500 bg-gray-100 rounded-full px-3 py-1.5 border border-gray-200">
-          Week {week}/{totalWeeks}
+      {/* Week + score */}
+      <div style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 12 }}>
+        <span style={{
+          fontSize: 12, fontWeight: 600, color: "#6b7280",
+          background: "#f9fafb", border: "1px solid #e5e7eb",
+          borderRadius: 20, padding: "5px 12px",
+        }}>
+          Week {week}/{project.project_duration_weeks}
         </span>
-
-        {/* Progress */}
-        <div className="flex items-center gap-1.5">
-          <span className="text-[14px] font-bold text-gray-700">{healthScore}%</span>
-          <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-          </svg>
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <span style={{ fontSize: 15, fontWeight: 700, color: "#374151" }}>{healthScore}%</span>
+          <span style={{ color: "#9ca3af" }}><Icons.ChevronRight /></span>
         </div>
       </div>
     </div>
@@ -380,9 +489,15 @@ function SkeletonCard() {
 export default function ProjectsPage() {
   const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
   const [openProjects, setOpenProjects] = useState<Project[]>([]);
-  const [activeProjects, setActiveProjects] = useState<ActiveProjectData[]>([]);
-  const [proposalCounts, setProposalCounts] = useState<ProposalCounts>({ pending: 0, confirmed: 0 });
+  const [inProgressProjects, setInProgressProjects] = useState<ActiveProjectData[]>([]);
+
+  const [proposalCounts, setProposalCounts] = useState<ProposalCounts>({
+    pending: 0,
+    confirmed: 0,
+  });
+
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<"deadline" | "duration" | "spots">("deadline");
   const [loading, setLoading] = useState(true);
@@ -390,176 +505,92 @@ export default function ProjectsPage() {
   useEffect(() => {
     async function load() {
       const supabase = createClient();
-      console.log("[student/projects] Loading projects page data...");
 
-      // Fetch open projects
-      const { data: openData, error: openError } = await supabase
+      console.log("[student/projects] Loading...");
+
+      const user = await getCurrentUser();
+
+      if (!user) {
+        setLoading(false);
+        return;
+      }
+
+      // ─────────────────────────────────────────────
+      // 1. OPEN PROJECTS
+      // ─────────────────────────────────────────────
+      const { data: openData } = await supabase
         .from("project")
         .select(PROJECT_SELECT)
         .eq("status", "open");
-      console.log("[student/projects] Open projects fetch", {
-        success: !openError,
-        count: openData?.length ?? 0,
-        error: openError?.message ?? null,
-      });
-
-      const user = await getCurrentUser();
-      console.log("[student/projects] Current user fetch", {
-        success: Boolean(user),
-        userId: user?.id ?? null,
-        role: user?.role ?? null,
-      });
-
-      if (user) {
-        let activeConfirmedCount = 0;
-
-        // Fetch confirmed proposals → active projects
-        const [
-          { data: confirmedProposals, error: confirmedError },
-          { data: signedAgreements, error: signedError },
-        ] = await Promise.all([
-          supabase
-            .from("proposal")
-            .select("project_id, status")
-            .eq("candidate_id", user.id)
-            .eq("status", "confirmed"),
-          supabase
-            .from("signed_agreement")
-            .select("project_id, signed_at, agreement_pdf_url")
-            .eq("candidate_id", user.id),
-        ]);
-        console.log("[student/projects] Confirmed proposals fetch", {
-          success: !confirmedError,
-          count: confirmedProposals?.length ?? 0,
-          projectIds: confirmedProposals?.map((row) => row.project_id) ?? [],
-          error: confirmedError?.message ?? null,
-        });
-        console.log("[student/projects] Signed agreements fetch", {
-          success: !signedError,
-          count: signedAgreements?.length ?? 0,
-          projectIds: signedAgreements?.map((row) => row.project_id) ?? [],
-          error: signedError?.message ?? null,
-        });
-
-        if (confirmedProposals) {
-          const confirmedRows = confirmedProposals as ConfirmedProposalRow[];
-          const confirmedProjectIds = new Set(confirmedRows
-            .map((row) => row.project_id)
-            .filter(Boolean));
-          const signedByProject = new Map(
-            ((signedAgreements ?? []) as SignedAgreementRow[]).map((agreement) => [
-              agreement.project_id,
-              agreement,
-            ])
-          );
-          const projectIds = [...confirmedProjectIds].filter((id) => signedByProject.has(id));
-          activeConfirmedCount = projectIds.length;
-          console.log("[student/projects] Active confirmed + signed project ids", projectIds);
-
-          const { data: activeProjectsData, error: activeProjectsError } =
-            projectIds.length > 0
-              ? await supabase
-                  .from("project")
-                  .select(PROJECT_SELECT)
-                  .in("id", projectIds)
-              : { data: [], error: null };
-          console.log("[student/projects] Active projects fetch", {
-            success: !activeProjectsError,
-            count: activeProjectsData?.length ?? 0,
-            titles: activeProjectsData?.map((project) => project.title) ?? [],
-            error: activeProjectsError?.message ?? null,
-          });
-
-          const active = ((activeProjectsData ?? []) as ActiveProjectData[]).map((project) => ({
-            ...project,
-            signed_at: signedByProject.get(project.id)?.signed_at ?? null,
-            agreement_pdf_url: signedByProject.get(project.id)?.agreement_pdf_url ?? null,
-          }));
-
-          // Enrich with latest health log data
-          if (active.length > 0) {
-            const projectIds = active.map((p) => p.id);
-            const { data: healthLogs, error: healthError } = await supabase
-              .from("project_health_log")
-              .select("project_id, week_number, health_score")
-              .in("project_id", projectIds)
-              .order("week_number", { ascending: false });
-            console.log("[student/projects] Health logs fetch", {
-              success: !healthError,
-              count: healthLogs?.length ?? 0,
-              error: healthError?.message ?? null,
-            });
-
-            const latestByProject = new Map<string, { week_number: number; health_score: number }>();
-            if (healthLogs) {
-              for (const log of healthLogs) {
-                if (!latestByProject.has(log.project_id)) {
-                  latestByProject.set(log.project_id, {
-                    week_number: log.week_number,
-                    health_score: log.health_score ?? 0,
-                  });
-                }
-              }
-            }
-
-            const enriched = active.map((p) => ({
-              ...p,
-              week_number: latestByProject.get(p.id)?.week_number,
-              health_score: latestByProject.get(p.id)?.health_score,
-            }));
-
-            setActiveProjects(enriched);
-            console.log("[student/projects] Active projects rendered", {
-              count: enriched.length,
-              projects: enriched.map((project) => ({
-                id: project.id,
-                title: project.title,
-                signed_at: project.signed_at,
-                week_number: project.week_number,
-                health_score: project.health_score,
-              })),
-            });
-          } else {
-            setActiveProjects([]);
-            console.log("[student/projects] No active confirmed + signed projects to render");
-          }
-        }
-
-        // Fetch proposal counts for summary card
-        const { data: allProposals, error: allProposalsError } = await supabase
-          .from("proposal")
-          .select("status")
-          .eq("candidate_id", user.id);
-        console.log("[student/projects] Proposal counts fetch", {
-          success: !allProposalsError,
-          count: allProposals?.length ?? 0,
-          statuses: allProposals?.map((proposal) => proposal.status) ?? [],
-          error: allProposalsError?.message ?? null,
-        });
-
-        if (allProposals) {
-          const pending = allProposals.filter((p) =>
-            PENDING_PROPOSAL_STATUSES.includes(p.status as ProposalStatus)
-          ).length;
-          const confirmed = activeConfirmedCount;
-          setProposalCounts({ pending, confirmed });
-          console.log("[student/projects] Proposal counts rendered", { pending, confirmed });
-        }
-      }
 
       setOpenProjects(openData ?? []);
+
+      // ─────────────────────────────────────────────
+      // 2. IN-PROGRESS PROJECTS (FIXED LOGIC)
+      // ─────────────────────────────────────────────
+      const { data: confirmedProposals, error } = await supabase
+        .from("proposal")
+        .select("id, project_id")
+        .eq("status", "confirmed")
+        .eq("candidate_id", user.id);
+
+      console.log("confirmedProposals", confirmedProposals);
+      console.log("ERROR", error);
+      console.log("USER ID:", user.id);
+
+      const projectIds =
+        confirmedProposals?.map((r) => r.project_id) ?? [];
+
+      let inProgressFormatted: ActiveProjectData[] = [];
+
+      if (projectIds.length > 0) {
+        const { data: projectData, error: projectError } = await supabase
+          .from("project")
+          .select(PROJECT_SELECT)
+          .in("id", projectIds);
+
+        console.log("projectData", projectData);
+        console.log("projectError", projectError);
+
+        inProgressFormatted =
+          (projectData ?? []).map((proj) => ({
+            ...proj,
+            signed_at: null,
+          }));
+      }
+
+      setInProgressProjects(inProgressFormatted);
+
+      // ─────────────────────────────────────────────
+      // 3. PROPOSAL COUNTS
+      // ─────────────────────────────────────────────
+      const { data: allProposals } = await supabase
+        .from("proposal")
+        .select("status")
+        .eq("candidate_id", user.id);
+
+      const pending = (allProposals ?? []).filter((p) =>
+        PENDING_PROPOSAL_STATUSES.includes(p.status as ProposalStatus)
+      ).length;
+
+      setProposalCounts({
+        pending,
+        confirmed: inProgressFormatted.length,
+      });
+
       setLoading(false);
-      console.log("[student/projects] Loading complete");
     }
 
     load();
   }, []);
 
-  // Filter active projects out of open list
-  const activeIds = new Set(activeProjects.map((p) => p.id));
+  // ─────────────────────────────────────────────
+  // FILTER OPEN PROJECTS ONLY
+  // ─────────────────────────────────────────────
+  const inProgressIds = new Set(inProgressProjects.map((p) => p.id));
 
   const filtered = openProjects
-    .filter((p) => !activeIds.has(p.id))
+    .filter((p) => !inProgressIds.has(p.id))
     .filter(
       (p) =>
         p.title.toLowerCase().includes(search.toLowerCase()) ||
@@ -567,124 +598,131 @@ export default function ProjectsPage() {
     )
     .sort((a, b) => {
       if (sort === "deadline")
-        return (a.submission_end_date ?? "").localeCompare(b.submission_end_date ?? "");
+        return (a.submission_end_date ?? "").localeCompare(
+          b.submission_end_date ?? ""
+        );
       if (sort === "duration")
         return a.project_duration_weeks - b.project_duration_weeks;
       return b.max_candidates - a.max_candidates;
     });
 
-  return (
-    <div className="flex h-screen bg-gray-50 overflow-hidden">
-      {/* Sidebar overlay (mobile) */}
-      {sidebarOpen && (
-        <div
-          className="fixed inset-0 bg-black/40 z-20 lg:hidden"
-          onClick={() => setSidebarOpen(false)}
-        />
-      )}
+return (
+  <div className="flex h-screen bg-gray-50 overflow-hidden">
+    {sidebarOpen && (
+      <div
+        className="fixed inset-0 bg-black/40 z-20 lg:hidden"
+        onClick={() => setSidebarOpen(false)}
+      />
+    )}
 
-      <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+    <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
-      <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
-        <div className="flex-1 overflow-y-auto">
-          <div className="p-6 mx-auto">
+    <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
+      <div className="flex-1 overflow-y-auto">
+        <div className="p-6 mx-auto">
 
-            {/* Page Header */}
-            <div className="mb-6">
-              <h1 className="text-2xl font-bold text-gray-900">My Projects</h1>
-              <p className="text-sm text-gray-500 mt-1">
-                Your active project and open DXP projects to apply for
-              </p>
+          {/* ───────────────── HEADER ───────────────── */}
+          <div className="mb-6">
+            <h1 className="text-2xl font-bold text-gray-900">
+              My Projects
+            </h1>
+            <p className="text-sm text-gray-500 mt-1">
+              Your active project and open DXP projects to apply for
+            </p>
+          </div>
+
+          {/* ───────────────── ACTIVE PROJECT ───────────────── */}
+          {inProgressProjects.length > 0 && (
+            <div className="mb-5">
+              {inProgressProjects.map((p) => (
+                <ActiveProjectBanner
+                  key={p.id}
+                  project={p}
+                  onClick={() =>
+                    router.push(`/student/projects/${p.id}`)
+                  }
+                />
+              ))}
             </div>
+          )}
 
-            {/* Active Project Banner(s) */}
-            {activeProjects.length > 0 && (
-              <div className="flex flex-col gap-3 mb-4">
-                {activeProjects.map((p) => (
-                  <ActiveProjectBanner
-                    key={p.id}
-                    project={p}
-                    onClick={() => router.push(`/student/projects/${p.id}`)}
-                  />
-                ))}
-              </div>
-            )}
+          {/* ───────────────── PROPOSAL SUMMARY ───────────────── */}
+          <div className="mb-6">
+            <ProposalsSummaryCard
+              counts={proposalCounts}
+              onViewAll={() => router.push("/student/proposals")}
+            />
+          </div>
 
-            {/* My Proposals Summary */}
-            <div className="mb-6">
-              <ProposalsSummaryCard
-                counts={proposalCounts}
-                onViewAll={() => router.push("/student/proposals")}
+          {/* ───────────────── SEARCH + SORT ───────────────── */}
+          <div className="flex flex-col sm:flex-row gap-3 mb-6">
+            <div className="relative flex-1">
+              <svg
+                className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
+              >
+                <path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+
+              <input
+                type="text"
+                placeholder="Search projects..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="w-full pl-9 pr-4 py-2.5 text-sm border border-gray-200 rounded-xl bg-white"
               />
             </div>
 
-            {/* Search + Sort */}
-            <div className="flex flex-col sm:flex-row gap-3 mb-5">
-              <div className="relative flex-1">
-                <svg
-                  className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  strokeWidth={2}
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
-                <input
-                  type="text"
-                  placeholder="Search projects..."
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  className="w-full pl-9 pr-4 py-2.5 text-sm border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent"
-                />
-              </div>
-              <select
-                value={sort}
-                onChange={(e) => setSort(e.target.value as typeof sort)}
-                className="px-4 py-2.5 text-sm border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300 cursor-pointer text-gray-700"
-              >
-                <option value="deadline">Deadline Soonest</option>
-                <option value="duration">Shortest Duration</option>
-                <option value="spots">Most Spots</option>
-              </select>
-            </div>
-
-            {/* Cards grid */}
-            {loading ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {[1, 2, 3, 4].map((i) => (
-                  <SkeletonCard key={i} />
-                ))}
-              </div>
-            ) : filtered.length === 0 ? (
-              <div className="text-center py-20 text-gray-400">
-                <svg
-                  className="w-12 h-12 mx-auto mb-3 text-gray-300"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  strokeWidth={1.5}
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <p className="font-medium text-gray-500">No projects found</p>
-                <p className="text-sm mt-1">Try adjusting your search</p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {filtered.map((project) => (
-                  <ProjectCard
-                    key={project.id}
-                    project={project}
-                    onClick={() => router.push(`/student/projects/${project.id}`)}
-                  />
-                ))}
-              </div>
-            )}
-
+            <select
+              value={sort}
+              onChange={(e) => setSort(e.target.value as any)}
+              className="px-4 py-2.5 text-sm border border-gray-200 rounded-xl bg-white"
+            >
+              <option value="deadline">Deadline Soonest</option>
+              <option value="duration">Shortest Duration</option>
+              <option value="spots">Most Spots</option>
+            </select>
           </div>
+
+          {/* ───────────────── OPEN PROJECTS TITLE ───────────────── */}
+          <div className="mb-3">
+            <h2 className="text-lg font-bold text-gray-900">
+              Open Projects
+            </h2>
+          </div>
+
+          {/* ───────────────── OPEN PROJECT GRID ───────────────── */}
+          {loading ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {[1, 2, 3, 4].map((i) => (
+                <SkeletonCard key={i} />
+              ))}
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="text-center py-20 text-gray-400">
+              <p className="font-medium">No projects found</p>
+              <p className="text-sm mt-1">Try adjusting your search</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {filtered.map((project) => (
+                <ProjectCard
+                  key={project.id}
+                  project={project}
+                  onClick={() =>
+                    router.push(`/student/projects/${project.id}`)
+                  }
+                />
+              ))}
+            </div>
+          )}
+
         </div>
       </div>
     </div>
-  );
+  </div>
+);
 }
