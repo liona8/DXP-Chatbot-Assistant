@@ -29,7 +29,7 @@ export default function CandidatePage() {
         setLocked(false);
         return;
       }
-      router.replace("/student");
+      router.replace("/student/projects");
     } catch {
       setError("Something went wrong. Please try again.");
       setPending(false);
