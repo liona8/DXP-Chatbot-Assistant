@@ -123,7 +123,7 @@ export async function sendMentorMessage(
   });
 
   const model = vertex.getGenerativeModel({
-    model: process.env.GEMINI_MODEL ?? "gemini-2.5-flash",
+    model: process.env.GEMINI_MODEL ?? "gemini-3-flash-preview",
     systemInstruction: systemPrompt,
   });
 

@@ -228,7 +228,7 @@ export async function sendStudentMessage(
   const model = vertex.getGenerativeModel({
     model:
       process.env.GEMINI_MODEL ??
-      "gemini-2.5-flash",
+      "gemini-3-flash-preview",
     systemInstruction: systemPrompt,
   });
 
