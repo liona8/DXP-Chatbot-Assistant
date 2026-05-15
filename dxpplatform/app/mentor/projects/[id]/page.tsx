@@ -458,7 +458,7 @@ export default function MentorProjectDetailPage() {
             <div className="space-y-4 text-sm text-gray-700">
               {execSummary.progress && (
                 <div>
-                  <p className="font-semibold text-gray-900 mb-1 text-xs uppercase tracking-wider text-indigo-600">
+                  <p className="font-semibold text-gray-900 mb-1 text-xs uppercase tracking-wider">
                     Combined Progress
                   </p>
                   {Array.isArray(execSummary.progress) ? (
@@ -630,21 +630,21 @@ export default function MentorProjectDetailPage() {
         </div>
 
         {project.project_scope && (
-          <section className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 lg:w-[calc(66.666%_-_0.875rem)]">
+          <section className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 lg:w-[calc(66.666%-0.875rem)]">
             <h2 className="font-semibold text-gray-900 mb-2">Candidates&apos; Mission</h2>
             <p className="text-sm text-gray-600 leading-relaxed">{project.project_scope}</p>
           </section>
         )}
 
         {project.requirements && (
-          <section className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 lg:w-[calc(66.666%_-_0.875rem)]">
+          <section className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 lg:w-[calc(66.666%-0.875rem)]">
             <h2 className="font-semibold text-gray-900 mb-2">Technical Requirements</h2>
             <p className="text-sm text-gray-600 leading-relaxed">{project.requirements}</p>
           </section>
         )}
 
         {/* Candidates */}
-        <section className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 lg:w-[calc(66.666%_-_0.875rem)]">
+        <section className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 lg:w-[calc(66.666%-0.875rem)]">
           <div className="flex items-center gap-2 mb-4">
             <Users className="w-4 h-4 text-indigo-500" />
             <h2 className="font-semibold text-gray-900">Confirmed Candidates</h2>
